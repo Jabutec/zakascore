@@ -1,0 +1,17 @@
+
+# Virtual environment
+venv/
+ 
+# Python cache
+__pycache__/
+*.pyc
+ 
+# Database 
+data/*.db
+ 
+# Environment variables
+.env
+ 
+# OS 
+.DS_Store
+.vscode/
