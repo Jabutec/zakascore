@@ -1,4 +1,4 @@
-# ZakaScore 🇿🇦
+# ZakaScore 
 
 Localized financial data platform for South African SME merchants. ZakaScore aggregates cash and digital transaction data into a single dashboard, giving merchants real business intelligence while structuring their data into a lender-ready financial profile, shared only with their explicit consent.
 
