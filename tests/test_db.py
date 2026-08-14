@@ -22,6 +22,13 @@ def test_database():
         print("Tables found in the database:")
         for table in tables:
             print(f" - {table[0]}")
+            
+    cursor.execute("SELECT * FROM merchants;")
+    merchants = cursor.fetchall()
+    
+    print("\nMerchants found: ")
+    for merchant in merchants:
+        print(f"-  {merchant}")
  
    
     conn.close()
