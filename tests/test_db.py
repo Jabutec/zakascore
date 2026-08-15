@@ -29,6 +29,19 @@ def test_database():
     print("\nMerchants found: ")
     for merchant in merchants:
         print(f"-  {merchant}")
+    
+    
+    cursor.execute("PRAGMA table_info(transactions);")
+    columns = cursor.fetchall()
+
+    print("\nTransactions columns:")
+    for column in columns:
+        print(column)
+        
+    cursor.execute("SELECT COUNT(*) FROM transactions;")
+    transaction_count = cursor.fetchone()[0]
+
+    print(f"\nTransactions found: {transaction_count}")
  
    
     conn.close()
