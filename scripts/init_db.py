@@ -22,25 +22,28 @@ def init_database():
     """)
     
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS transactions(
-            transaction_id TEXT PRIMARY KEY,
-            merchant_id TEXT NOT NULL,
-            input_type TEXT CHECK (input_type IN ('pos_tap', 'voice', 'manual')),
-            amount_zar REAL NOT NULL,
-            payment_method TEXT CHECK (payment_method IN ('cash', 'digital')),
-            transaction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (merchant_id) REFERENCES merchants(merchant_id)   
-        );                          
+        CREATE TABLE IF NOT EXISTS data_sources(
+           source_id TEXT PRIMARY KEY,
+           source_name TEXT NOT NULL,
+           source_type TEXT CHECK(source_type IN ('pos', 'bank_statement', 'accounting_software', 'online_store')),
+           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );              
         """)
     
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS data_sources(
-       source_id TEXT PRIMARY KEY,
-       source_name TEXT NOT NULL,
-       source_type TEXT CHECK(source_type IN ('pos', 'bank', 'manual', 'online_store')),
-       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );              
-    """)
+        CREATE TABLE IF NOT EXISTS transactions(
+            transaction_id TEXT PRIMARY KEY,
+            merchant_id TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            input_type TEXT CHECK (input_type IN ('pos_tap', 'voice', 'manual')),
+            amount_zar REAL NOT NULL CHECK(amount_zar >=0),
+            payment_method TEXT CHECK (payment_method IN ('cash', 'digital')),
+            transaction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (merchant_id) REFERENCES merchants(merchant_id),
+            FOREIGN KEY (source_id) REFERENCES data_sources(source_id)  
+        );                          
+        """)
+    
     
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS financial_snapshots(
