@@ -2,49 +2,78 @@
 
 **Release:** V1.0.0
 **Author:** Jabulani Mokoena
-**Last updated:** 2026-08-16
-**Status:** Active development — Database layer in progress
+**Last updated:** 2026-08-22
+**Status:** Database, validation, and automated testing layers implemented — BI engine next
 
 ---
 
 ## 1. System Purpose
 
-ZakaScore is a data aggregation and credit-scoring engine for South African SMEs. V1.0.0 is a **backend-first, single-service system** that proves the core pipeline: structured transaction data → validated ingestion → deterministic scoring logic → queryable API.
+ZakaScore is a financial intelligence and business analytics engine for South African SMEs.
 
-**V1.0.0 is not:** a lender, a frontend product, or a live-data system. It is the engineered core the rest of the product will sit on top of.
+V1.0.0 is a **backend-first system** focused on establishing the core data and analytics foundation:
+
+**structured business data → validated data → financial metrics → business insights → deterministic scoring**
+
+The system is designed to eventually help small businesses understand their financial performance, make better business decisions, and build a structured financial profile that may support future credit-readiness and lending use cases.
+
+**V1.0.0 is not:**
+
+- a lender
+- a machine-learning credit scoring system
+- a frontend application
+- a live banking/payment integration platform
+
+It is the engineered foundation that future interfaces, integrations, and intelligence capabilities will build upon.
 
 ---
 
 ## 2. Architecture Overview
 
-V1.0.0 is composed of four layers, built and delivered in this order:
+ZakaScore is composed of four primary layers, developed in the following order:
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
-│  4. INTERFACE — FastAPI application + /docs (OpenAPI) │
-│     Exposes endpoints to query merchants, transactions,│
-│     and computed scores. Auto-generated interactive    │
-│     documentation via FastAPI's built-in Swagger UI.    │
+│ 4. INTERFACE — FastAPI                              │
+│                                                     │
+│ Exposes validated business data, financial         │
+│ metrics, insights, and scoring functionality.       │
 ├─────────────────────────────────────────────────────┤
-│  3. BI ENGINE — Python scoring & analytics module       │
-│     Consumes validated transaction data, computes        │
-│     score + supporting metrics (volume, consistency,      │
-│     recency). Pure Python, decoupled from the API layer   │
-│     so it can be tested and reasoned about independently.  │
+│ 3. BI ENGINE — Python                               │
+│                                                     │
+│ Consumes validated business data and produces       │
+│ financial metrics, insights, snapshots, and         │
+│ deterministic scoring outputs.                      │
 ├─────────────────────────────────────────────────────┤
-│  2. VALIDATION — Pydantic models                          │
-│     Defines the contract for what a valid Merchant,         │
-│     Product, and Transaction record looks like. Rejects      │
-│     malformed data before it reaches the database.            │
+│ 2. VALIDATION — Pydantic                            │
+│                                                     │
+│ Defines valid data structures and enforces          │
+│ application-level business rules before data       │
+│ reaches the database or analytics layer.            │
 ├─────────────────────────────────────────────────────┤
-│  1. DATABASE — SQLite (V1), schema-first design              │
-│     merchants, products, transactions. Source-agnostic         │
-│     schema designed to later accept real payment-provider       │
-│     data without structural rewrite.                             │
-└─────────────────────────────────────────────────────────────┘
+│ 1. DATABASE — SQLite                                │
+│                                                     │
+│ Schema-first storage for merchants, transactions,   │
+│ data sources, and financial snapshots.              │
+└─────────────────────────────────────────────────────┘
 ```
 
-**Design principle:** each layer only knows about the layer directly beneath it. The BI engine never touches raw database rows directly — it consumes Pydantic-validated objects. The API layer never computes scores itself — it calls the BI engine. This separation is what makes the system testable and lets each layer be swapped later (e.g., SQLite → Postgres, synthetic data → live Yoco feed) without a full rewrite.
+### Design principle
+
+Each layer should have a clearly defined responsibility.
+
+- The **database** provides persistence and structural integrity.
+- **Pydantic** provides application-level validation.
+- The **BI engine** performs calculations and generates financial intelligence.
+- The **API** exposes functionality without embedding business calculations directly into endpoint handlers.
+
+The architecture should allow individual implementation details to evolve without requiring a complete rewrite of the system.
+
+For example:
+
+- SQLite may eventually be replaced by PostgreSQL.
+- Synthetic/manual data may eventually be supplemented by external integrations.
+- New interfaces may consume the same BI engine without duplicating its logic.
 
 ---
 
@@ -52,128 +81,244 @@ V1.0.0 is composed of four layers, built and delivered in this order:
 
 ### 3.1 Database Layer
 
-**Purpose:** Persist merchant, product, and transaction records in a normalized, source-agnostic schema.
+**Purpose:** Persist merchant, transaction, data-source, and financial-snapshot records in a structured schema.
 
-| ID   | Requirement                                                                                                                                                         | Priority |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| DB-1 | System shall store merchant records (id, business name, email, hashed password, created_at).                                                                        | Must     |
-| DB-2 | System shall store product records associated with a merchant (id, merchant_id, name, category, price).                                                             | Must     |
-| DB-3 | System shall store transaction records associated with a merchant (id, merchant_id, product_id, amount, timestamp, status, source).                                 | Must     |
-| DB-4 | Transaction schema shall include a `source` field (e.g., `synthetic`, `yoco`, `bank`) so future real data sources plug into the same table without a schema change. | Must     |
-| DB-5 | Foreign key constraints shall enforce that transactions and products cannot exist without a valid merchant.                                                         | Must     |
-| DB-6 | Schema shall be designed to migrate cleanly from SQLite to a production RDBMS (e.g., PostgreSQL) — avoid SQLite-specific type shortcuts.                            | Should   |
+| ID   | Requirement                                                                                                                               | Priority | Status      |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------- |
+| DB-1 | System shall store merchant records with a unique identifier, business name, optional location, and creation timestamp.                   | Must     | Implemented |
+| DB-2 | System shall store transaction records associated with a merchant.                                                                        | Must     | Implemented |
+| DB-3 | Transactions shall record input type, transaction amount, payment method, source, and timestamp.                                          | Must     | Implemented |
+| DB-4 | System shall maintain a catalog of data sources with a defined source taxonomy.                                                           | Must     | Implemented |
+| DB-5 | Transactions shall be traceable to their originating data source through a foreign key relationship.                                      | Must     | Implemented |
+| DB-6 | Foreign key constraints shall enforce relationships between merchants, transactions, financial snapshots, and data sources where defined. | Must     | Implemented |
+| DB-7 | System shall store periodized financial snapshots associated with merchants.                                                              | Must     | Implemented |
+| DB-8 | Financial snapshot values shall enforce non-negative financial constraints and valid reporting periods.                                   | Must     | Implemented |
+| DB-9 | Schema design should support eventual migration from SQLite to a production relational database.                                          | Should   | Ongoing     |
 
-**Definition of Done:** `scripts/init_db.py` creates all tables with constraints enforced; a test script confirms invalid inserts (e.g., orphaned transaction) are rejected at the database level.
-
----
-
-### 3.2 Validation Layer (FastAPI + Pydantic)
-
-**Purpose:** Guarantee that no malformed or incomplete data reaches the database or the BI engine.
-
-| ID    | Requirement                                                                                                                                                                              | Priority |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| VAL-1 | System shall define a Pydantic model for `MerchantCreate` validating business name, email format, and password strength.                                                                 | Must     |
-| VAL-2 | System shall define a Pydantic model for `TransactionCreate` validating amount (positive, correct decimal precision), timestamp, and status enum.                                        | Must     |
-| VAL-3 | System shall reject and return a structured error (HTTP 422) for any payload failing validation, with a clear field-level error message.                                                 | Must     |
-| VAL-4 | Pydantic response models shall be separate from input models, so internal fields (e.g., hashed password) are never serialized back to a client.                                          | Must     |
-| VAL-5 | Validation models shall be reused as the single source of truth for both API request bodies and internal data generation (synthetic data generator must produce Pydantic-valid records). | Should   |
-
-**Definition of Done:** every write path (API endpoint or synthetic data seeder) passes through a Pydantic model; no raw dict is inserted into the database unvalidated.
+**Definition of Done:** The database schema is created through the initialization scripts, relationships and constraints are enforced, and automated tests verify database functionality.
 
 ---
 
-### 3.3 BI Engine (Python)
+### 3.2 Validation Layer — Pydantic
 
-**Purpose:** Compute a business score and supporting metrics from a merchant's validated transaction history.
+**Purpose:** Ensure application data conforms to the defined schema and business rules before being processed further.
 
-| ID   | Requirement                                                                                                                                                                                                            | Priority |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| BI-1 | Engine shall calculate transaction volume metrics (total, average, count) over a configurable time window.                                                                                                             | Must     |
-| BI-2 | Engine shall calculate consistency metrics (e.g., variance in transaction frequency/amount over time).                                                                                                                 | Must     |
-| BI-3 | Engine shall calculate recency (how current the merchant's data is).                                                                                                                                                   | Must     |
-| BI-4 | Engine shall combine volume, consistency, and recency into a single deterministic score using a documented, explainable formula (rule-based, not a black-box model, for V1).                                           | Must     |
-| BI-5 | Engine shall return a "insufficient data" state rather than a misleading score when a merchant has less than a defined minimum history (e.g., 30 days / N transactions).                                               | Must     |
-| BI-6 | Engine logic shall be implemented as pure functions independent of FastAPI/database code, so it can be unit tested in isolation.                                                                                       | Must     |
-| BI-7 | Engine shall be tested against multiple synthetic merchant profiles representing different business patterns (steady, seasonal, declining, sparse) to validate the scoring formula behaves sensibly across archetypes. | Should   |
+| ID    | Requirement                                                                                        | Priority | Status      |
+| ----- | -------------------------------------------------------------------------------------------------- | -------- | ----------- |
+| VAL-1 | System shall define Pydantic models for merchant data.                                             | Must     | Implemented |
+| VAL-2 | System shall define Pydantic models for transaction data.                                          | Must     | Implemented |
+| VAL-3 | System shall define Pydantic models for data-source records.                                       | Must     | Implemented |
+| VAL-4 | System shall define Pydantic models for financial snapshots.                                       | Must     | Implemented |
+| VAL-5 | Constrained fields shall reject invalid values such as unsupported payment methods or input types. | Must     | Implemented |
+| VAL-6 | Financial values requiring non-negative constraints shall reject invalid negative values.          | Must     | Implemented |
+| VAL-7 | Validation rules shall be covered by automated tests.                                              | Must     | Implemented |
 
-**Definition of Done:** scoring formula is documented (inputs, weights, output range); unit tests cover at least the four synthetic merchant archetypes above with expected score ranges asserted.
+The validation layer acts as the application-level contract between incoming data and the rest of the system.
 
----
-
-### 3.4 Interface Layer (FastAPI + `/docs`)
-
-**Purpose:** Expose the system's functionality via a documented, testable API — no frontend in V1.0.0.
-
-| ID    | Requirement                                                                                                                                     | Priority |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| API-1 | System shall expose `POST /merchants` to create a merchant (validated via VAL-1).                                                               | Must     |
-| API-2 | System shall expose `GET /merchants/{id}` to retrieve merchant details (excluding password hash).                                               | Must     |
-| API-3 | System shall expose `POST /transactions` to record a transaction (validated via VAL-2).                                                         | Must     |
-| API-4 | System shall expose `GET /merchants/{id}/transactions` to list a merchant's transaction history.                                                | Must     |
-| API-5 | System shall expose `GET /merchants/{id}/score` to return the current computed score and supporting metrics from the BI engine.                 | Must     |
-| API-6 | All endpoints shall be documented and testable via FastAPI's auto-generated `/docs` (Swagger UI) with example request/response schemas visible. | Must     |
-| API-7 | Endpoints shall return appropriate HTTP status codes (200, 201, 404, 422) rather than generic 200s with error messages in the body.             | Must     |
-
-**Definition of Done:** every endpoint above is callable and testable directly from `/docs` with no external client needed; example payloads in Swagger reflect real Pydantic schemas, not placeholders.
+**Definition of Done:** Core Pydantic models are implemented, validation rules are enforced, and automated tests cover valid and invalid inputs.
 
 ---
 
-## 4. Synthetic Data Strategy
+### 3.3 Automated Testing
 
-Since V1.0.0 has no live payment-provider connection, a **synthetic data generator** is a first-class part of this release, not an afterthought.
+**Purpose:** Protect the database and validation foundation as ZakaScore evolves.
 
-| ID    | Requirement                                                                                                                                                                     | Priority |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| SYN-1 | System shall include a script that generates realistic synthetic merchants, products, and transactions, passed through the same Pydantic validation as real input.              | Must     |
-| SYN-2 | Generator shall support multiple archetypes (steady-volume, seasonal, growing, declining, sparse/new merchant) to stress-test the BI engine against varied real-world patterns. | Must     |
-| SYN-3 | Generator shall be seedable/repeatable (fixed random seed option) so scoring results are reproducible for testing and demos.                                                    | Should   |
-| SYN-4 | Synthetic transactions shall be tagged `source = "synthetic"` in the database, clearly distinguishing them from any future real data.                                           | Must     |
+| ID     | Requirement                                                                                            | Priority | Status      |
+| ------ | ------------------------------------------------------------------------------------------------------ | -------- | ----------- |
+| TEST-1 | Database functionality shall be covered by automated tests.                                            | Must     | Implemented |
+| TEST-2 | Valid Pydantic models shall be accepted.                                                               | Must     | Implemented |
+| TEST-3 | Invalid values shall be rejected according to defined validation rules.                                | Must     | Implemented |
+| TEST-4 | Parameterized tests shall be used where the same validation rule applies to multiple fields or values. | Should   | Implemented |
+| TEST-5 | The complete automated test suite shall pass before major development layers are introduced.           | Must     | Implemented |
+
+**Current baseline:**
+
+```text
+39 tests passed
+```
+
+The testing foundation will continue to expand as the BI engine and API layers are implemented.
+
+---
+
+### 3.4 BI Engine — Python
+
+**Purpose:** Transform validated business data into useful financial metrics, insights, and scoring outputs.
+
+| ID    | Requirement                                                                                                        | Priority | Status  |
+| ----- | ------------------------------------------------------------------------------------------------------------------ | -------- | ------- |
+| BI-1  | Engine shall aggregate transaction data into financial metrics for a merchant and defined reporting period.        | Must     | Pending |
+| BI-2  | Engine shall calculate revenue and transaction-volume metrics.                                                     | Must     | Pending |
+| BI-3  | Engine shall calculate performance and consistency metrics.                                                        | Must     | Pending |
+| BI-4  | Engine shall calculate revenue growth between comparable reporting periods.                                        | Must     | Pending |
+| BI-5  | Engine shall calculate an explainable measure of financial volatility.                                             | Must     | Pending |
+| BI-6  | Engine shall generate business insights from calculated metrics.                                                   | Must     | Pending |
+| BI-7  | Engine shall combine defined metrics into a deterministic and explainable score.                                   | Must     | Pending |
+| BI-8  | Engine shall return an insufficient-data state when available history does not meet the defined minimum threshold. | Must     | Pending |
+| BI-9  | BI calculations shall be implemented independently from FastAPI endpoint logic.                                    | Must     | Pending |
+| BI-10 | BI logic shall be covered by automated tests using representative business scenarios.                              | Must     | Pending |
+
+The BI engine is not intended to produce a score alone. Metrics and insights are first-class outputs of the system.
+
+**Definition of Done:** The BI engine has documented calculations, produces meaningful metrics and insights, implements an explainable scoring methodology, and passes automated tests across representative business scenarios.
+
+---
+
+### 3.5 Interface Layer — FastAPI
+
+**Purpose:** Provide a future programmatic interface to ZakaScore functionality.
+
+The API layer has not yet been implemented.
+
+| ID    | Requirement                                                                                   | Priority | Status  |
+| ----- | --------------------------------------------------------------------------------------------- | -------- | ------- |
+| API-1 | System shall expose an endpoint for creating merchants.                                       | Must     | Pending |
+| API-2 | System shall expose an endpoint for recording transactions.                                   | Must     | Pending |
+| API-3 | System shall expose an endpoint for retrieving merchant transactions.                         | Must     | Pending |
+| API-4 | System shall expose an endpoint for retrieving financial snapshots.                           | Must     | Pending |
+| API-5 | System shall expose an endpoint for retrieving business metrics and insights.                 | Must     | Pending |
+| API-6 | System shall expose an endpoint for retrieving the current ZakaScore.                         | Must     | Pending |
+| API-7 | API endpoints shall use Pydantic request and response models.                                 | Must     | Pending |
+| API-8 | Endpoints shall be documented and testable through FastAPI's automatically generated `/docs`. | Must     | Pending |
+| API-9 | Endpoints shall return appropriate HTTP status codes for successful and failed operations.    | Must     | Pending |
+
+---
+
+## 4. Data Strategy
+
+ZakaScore is designed to be **source-agnostic**.
+
+The database currently supports the concept of multiple data sources, allowing transactions to be associated with their originating source.
+
+Potential future sources may include:
+
+- POS systems
+- bank data
+- manual entry
+- online stores
+- WhatsApp-based transaction capture
+- other payment or business systems
+
+V1.0.0 does not require live integrations with these external systems.
+
+The objective at this stage is to establish a data model capable of supporting them later without requiring a fundamental redesign.
 
 ---
 
 ## 5. Non-Functional Requirements
 
-| Category       | Requirement                                                                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Security       | Passwords hashed (e.g., bcrypt/passlib); no plaintext secrets in code or repo; `.env` used for any config values                                           |
-| Data integrity | Foreign key constraints enforced at the database level, not just application level                                                                         |
-| Testability    | Each layer (DB, validation, BI engine, API) shall have at least basic automated tests; BI engine logic shall be unit-testable without a running API server |
-| Performance    | API responses for synthetic dataset sizes (hundreds–low thousands of transactions) shall return in under 500ms                                             |
-| Portability    | No SQLite-specific logic embedded in application code that would block a future Postgres migration                                                         |
-| Documentation  | `/docs` (Swagger) shall serve as the living API reference; `SRS.md` and this document shall be kept in sync with actual schema/endpoints as they evolve    |
+| Category       | Requirement                                                                                                             |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Data integrity | Foreign key constraints shall be enforced at the database level.                                                        |
+| Validation     | Application-level validation shall be performed using Pydantic.                                                         |
+| Testability    | Database, validation, and BI logic shall be independently testable.                                                     |
+| Explainability | Scoring calculations shall be deterministic and explainable in V1.0.0.                                                  |
+| Security       | No plaintext passwords, API keys, or other secrets shall be stored in source code.                                      |
+| Portability    | Application logic should avoid unnecessary SQLite-specific dependencies that would prevent future PostgreSQL migration. |
+| Performance    | BI calculations should remain practical for small-business transaction datasets.                                        |
+| Documentation  | System documentation shall remain synchronized with the as-built architecture and implementation.                       |
 
 ---
 
-## 6. Explicit Exclusions (V1.0.0)
+## 6. Explicit Exclusions — V1.0.0
 
-To keep scope honest and prevent creep:
+To maintain a realistic scope, V1.0.0 excludes:
 
-- No Yoco, bank, PayFast, Ozow, or Stitch/Mono integration — synthetic data only
-- No frontend/UI — `/docs` is the only interface
-- No authentication tokens/session management beyond basic merchant record creation (full auth flow can follow in a later version)
-- No machine learning scoring model — V1 scoring is rule-based and explainable by design
-- No multi-tenant/lender-facing views
+- Live bank integrations
+- Live payment-provider integrations
+- Yoco integration
+- PayFast integration
+- Ozow integration
+- Stitch/Mono integration
+- Machine-learning credit scoring
+- A production frontend
+- Full authentication and session management
+- Lender-facing dashboards
+- Automated lending decisions
+
+These capabilities may be considered in future versions.
 
 ---
 
 ## 7. Open Engineering Decisions
 
-- **Score scale:** 0–100 vs. 300–850-style range, needs to be fixed before BI-4 is finalized, since it affects both the formula's normalization and any future UI.
-- **Minimum data threshold:** exact number of days/transactions before a score is considered valid (BI-5) — needs a concrete value, not just "enough."
-- **Weighting formula:** relative weight of volume vs. consistency vs. recency in the final score should be documented as a config (e.g., a `weights.py` or config dict) rather than hardcoded inline, so it can be tuned without touching core logic.
-- **Synthetic data realism:** what statistical distributions best approximate real SME transaction patterns (e.g., Poisson-distributed daily transaction counts, log-normal transaction amounts) worth a short research pass before building SYN-1 in full.
+### 7.1 Score scale
+
+The final score scale must be defined before the scoring formula is finalized.
+
+Potential approaches include a simple 0–100 scale or a more traditional credit-score-style range.
+
+### 7.2 Minimum data threshold
+
+The minimum transaction history required before ZakaScore can produce a meaningful score must be defined.
+
+The threshold may consider:
+
+- number of transactions
+- number of reporting periods
+- number of days of history
+
+### 7.3 Scoring methodology
+
+The relative contribution of different metrics such as volume, consistency, growth, and recency must be documented before the scoring engine is finalized.
+
+The formula should remain deterministic and explainable in V1.0.0.
+
+### 7.4 Synthetic/test data
+
+Representative business scenarios should be established for BI testing, such as:
+
+- steady business
+- growing business
+- declining business
+- seasonal business
+- sparse/new business
+
+These scenarios will help ensure that scoring and insight generation behave sensibly across different operating patterns.
+
+### 7.5 Snapshot generation
+
+A decision is required on whether financial snapshots are generated:
+
+- on demand,
+- on a schedule,
+- or through a combination of both.
 
 ---
 
 ## 8. Definition of Done — V1.0.0
 
-V1.0.0 is complete when:
+V1.0.0 will be considered complete when:
 
-- [ ] Database schema is finalized, migrated, and constraint-tested
-- [ ] All Pydantic validation models are implemented and enforced on every write path
-- [ ] Synthetic data generator produces valid, varied merchant/transaction datasets
-- [ ] BI engine computes scores deterministically and passes unit tests across all synthetic archetypes
-- [ ] All FastAPI endpoints are implemented, documented, and functional via `/docs`
-- [ ] No hardcoded secrets or credentials exist anywhere in the repository
-- [ ] `SRS.md` reflects the actual, as-built schema and endpoint list
+- [x] Database schema is implemented and constraint-tested
+- [x] Core Pydantic validation models are implemented
+- [x] Automated database and validation tests are passing
+- [ ] BI engine calculates required financial metrics
+- [ ] BI engine generates business insights
+- [ ] Deterministic scoring methodology is documented and implemented
+- [ ] BI engine is covered by automated tests
+- [ ] FastAPI interface is implemented
+- [ ] API endpoints are documented through `/docs`
+- [ ] API request and response models use Pydantic
+- [ ] No hardcoded secrets or credentials exist in the repository
+- [ ] System requirements documentation reflects the actual as-built architecture
+
+---
+
+## 9. Current Development Position
+
+The foundational layers of ZakaScore are now complete:
+
+```text
+Database
+   ↓
+Pydantic Validation
+   ↓
+Automated Testing
+   ↓
+BI Engine       ← NEXT
+   ↓
+FastAPI
+```
+
+The next major development stage is therefore the **ZakaScore BI Engine**, where validated transaction and financial data will be transformed into metrics, insights, and eventually the ZakaScore itself.
