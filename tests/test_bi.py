@@ -10,7 +10,6 @@ from bi.metrics import (
     calculate_recency
 )
 
-
 def create_transactions():
     return [
         Transaction(
