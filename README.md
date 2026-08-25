@@ -74,9 +74,9 @@ python -m pytest
 
 ### BI Engine
 
-- [ ] Financial metric calculations
-- [ ] Revenue and growth analysis
-- [ ] Business performance indicators
+- [x] Financial metric calculations
+- [x] Revenue and growth analysis
+- [x] Business performance indicators
 - [ ] Automated business insights
 - [ ] Data visualization
 
