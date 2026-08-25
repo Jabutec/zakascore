@@ -27,13 +27,13 @@ def calculate_transaction_activity(transaction_count, active_days):
 def determine_revenue_stability(revenue_volatility):
     if revenue_volatility is None:
         return "insufficient_data"
-    
-    if revenue_volatility > 0.10:
+
+    if revenue_volatility <= 0.10:
         return "high"
-    
-    if revenue_volatility >= 0.25:
+
+    if revenue_volatility <= 0.25:
         return "moderate"
-    
+
     return "low"
 
 def determine_activity_status(days_since_transaction):
