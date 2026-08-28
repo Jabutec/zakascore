@@ -77,7 +77,7 @@ python -m pytest
 - [x] Financial metric calculations
 - [x] Revenue and growth analysis
 - [x] Business performance indicators
-- [ ] Automated business insights
+- [x] Automated business insights
 - [ ] Data visualization
 
 ### Data Integration
