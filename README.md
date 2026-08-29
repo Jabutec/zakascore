@@ -78,7 +78,7 @@ python -m pytest
 - [x] Revenue and growth analysis
 - [x] Business performance indicators
 - [x] Automated business insights
-- [ ] Data visualization
+- [x] Data visualization
 
 ### Data Integration
 
