@@ -16,7 +16,9 @@ def init_database():
     CREATE TABLE IF NOT EXISTS merchants(
       merchant_id TEXT PRIMARY KEY,
       business_name TEXT NOT NULL,
-      location TEXT,  
+      whatsapp_number TEXT NOT NULL UNIQUE,
+      location TEXT,
+      tier TEXT NOT NULL DEFAULT 'free' CHECK(tier IN ('free', 'insights', 'full')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)
@@ -25,9 +27,9 @@ def init_database():
         CREATE TABLE IF NOT EXISTS data_sources(
            source_id TEXT PRIMARY KEY,
            source_name TEXT NOT NULL,
-           source_type TEXT CHECK(source_type IN ('pos', 'bank_statement', 'accounting_software', 'online_store')),
+           source_type TEXT CHECK(source_type IN ('pos', 'bank_statement', 'accounting_software', 'online_store', 'whatsapp')),
            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        );              
+        );
         """)
     
     cursor.execute("""
@@ -35,15 +37,17 @@ def init_database():
             transaction_id TEXT PRIMARY KEY,
             merchant_id TEXT NOT NULL,
             source_id TEXT NOT NULL,
-            input_type TEXT CHECK (input_type IN ('pos_tap', 'voice', 'manual')),
+            input_type TEXT CHECK (input_type IN ('pos_tap', 'voice', 'manual', 'whatsapp')),
             amount_zar REAL NOT NULL CHECK(amount_zar >=0),
             payment_method TEXT CHECK (payment_method IN ('cash', 'digital')),
+            raw_message TEXT,
+            whatsapp_message_id TEXT UNIQUE,
+            is_voided INTEGER NOT NULL DEFAULT 0 CHECK(is_voided IN (0, 1)),
             transaction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (merchant_id) REFERENCES merchants(merchant_id),
-            FOREIGN KEY (source_id) REFERENCES data_sources(source_id)  
-        );                          
+            FOREIGN KEY (source_id) REFERENCES data_sources(source_id)
+        );
         """)
-    
     
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS financial_snapshots(
@@ -66,8 +70,7 @@ def init_database():
     
     conn.commit()
     conn.close()
-    print(f"Database initialized successfullly at {DB_PATH}")
+    print(f"Database initialized successfully at {DB_PATH}")
     
 if __name__ == "__main__":
     init_database()
-    
