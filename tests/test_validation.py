@@ -93,6 +93,7 @@ def test_merchant():
     merchant = Merchant(
         merchant_id= "M001",
         business_name= "vertical",
+        whatsapp_number="+27821234567",
         location= "Joburg",
         created_at= datetime.now()   
     )
@@ -157,9 +158,10 @@ def test_non_negative_fields(field):
         "average_transaction_zar",
     ]
 )
+
 def test_non_negative_accept_valid_fields(field):
     data = {
-        "snapshot_id": "S001",
+        "snapshot_id": "F001",   # was "S001"
         "merchant_id": "M001",
         "period_start": date(2026, 1, 1),
         "period_end": date(2026, 1, 31),
@@ -171,7 +173,7 @@ def test_non_negative_accept_valid_fields(field):
         "created_at": datetime.now()
     }
     data[field] = 100
-
+    
     snapshot = FinancialSnapshot(**data)
    
     assert getattr(snapshot, field) == 100

@@ -4,7 +4,7 @@ from faker import Faker
 import random
 import statistics
 from datetime import datetime, timedelta
-from utils.helpers import get_month_start,get_next_month
+from utils.helpers import get_month_start, get_next_month
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "..", "data", "zakascore.db")
@@ -17,20 +17,24 @@ cursor = conn.cursor()
 cursor.execute("PRAGMA foreign_keys = ON")
 
 # Seed merchants data
-for i in range (1,11):
+for i in range(1, 11):
     merchant_id = f"M{i:03d}"
-    
+
     cursor.execute("""
         INSERT INTO merchants(
             merchant_id,
             business_name,
-            location
+            whatsapp_number,
+            location,
+            tier
          )
-         VALUES (?,?,?);
-     """,(
+         VALUES (?,?,?,?,?);
+     """, (
         merchant_id,
         fake.company(),
-        fake.city()
+        f"+27{random.randint(600000000, 899999999)}",
+        fake.city(),
+        random.choice(["free", "insights", "full"])
     ))
 
 cursor.execute("SELECT merchant_id FROM merchants")
@@ -45,12 +49,13 @@ sources = [
     "pos",
     "online_store",
     "bank_statement",
-    "accounting_software"
+    "accounting_software",
+    "whatsapp"
 ]
-    
+
 for source_type in sources:
-    source_id = f"S{sources.index(source_type) +1:03d}"
-    
+    source_id = f"S{sources.index(source_type) + 1:03d}"
+
     cursor.execute("""
         INSERT INTO data_sources(
             source_id,
@@ -58,7 +63,7 @@ for source_type in sources:
             source_type
         )
         VALUES(?,?,?);
-    """,(
+    """, (
         source_id,
         fake.company(),
         source_type
@@ -71,26 +76,43 @@ cursor.execute("""
 source_ids = [row[0] for row in cursor.fetchall()]
 
 
-# Seed transactions data    
-for i in range(1,301):
+# Seed transactions data
+for i in range(1, 301):
     transaction_id = f"T{i:04d}"
     merchant_id = random.choice(merchant_ids)
     source_id = random.choice(source_ids)
     input_type = random.choice([
         "pos_tap",
         "voice",
-        "manual"   
+        "manual",
+        "whatsapp"
     ])
     amount_zar = round(random.uniform(50, 5000), 2)
-    payment_method = random.choice([
-        "cash",
-        "digital"
-    ])
-    transaction_date =fake.date_time_between(
-        start_date ="-6m",
-        end_date= "now"
+
+    # whatsapp transactions never carry a payment_method (matches the
+    # Transaction model's conditional validator)
+    if input_type == "whatsapp":
+        payment_method = None
+    else:
+        payment_method = random.choice([
+            "cash",
+            "digital"
+        ])
+
+    raw_message = None
+    whatsapp_message_id = None
+    if input_type == "whatsapp":
+        raw_message = str(int(amount_zar))
+        whatsapp_message_id = f"SM{fake.uuid4().replace('-', '')[:32]}"
+
+    # small sample of voided transactions to exercise is_voided filtering
+    is_voided = 1 if random.random() < 0.03 else 0
+
+    transaction_date = fake.date_time_between(
+        start_date="-6m",
+        end_date="now"
     )
-    
+
     cursor.execute("""
         INSERT INTO transactions(
             transaction_id,
@@ -99,52 +121,58 @@ for i in range(1,301):
             input_type,
             amount_zar,
             payment_method,
+            raw_message,
+            whatsapp_message_id,
+            is_voided,
             transaction_date
         )
-        VALUES (?,?,?,?,?,?,?);
-    """,(
+        VALUES (?,?,?,?,?,?,?,?,?,?);
+    """, (
         transaction_id,
         merchant_id,
         source_id,
         input_type,
         amount_zar,
         payment_method,
+        raw_message,
+        whatsapp_message_id,
+        is_voided,
         transaction_date
     ))
 
 
-# Seed financial snapshots    
+# Seed financial snapshots
 today = datetime.now()
 current_month = get_month_start(today)
 
 period_starts = []
 
-for months_back in range(5,-1,-1):
+for months_back in range(5, -1, -1):
     month = current_month
-    
+
     for _ in range(months_back):
-        if month.month ==1:
+        if month.month == 1:
             month = month.replace(
-                year= month.year -1,
+                year=month.year - 1,
                 month=12
             )
         else:
             month = month.replace(
-            month=month.month -1
+                month=month.month - 1
             )
     period_starts.append(month)
-    
+
 snapshot_number = 1
 
 for merchant_id in merchant_ids:
     monthly_revenues = []
-    previous_revenue =None
-    
+    previous_revenue = None
+
     for period_start in period_starts:
         period_end = get_next_month(
             period_start
         )
-        
+
         cursor.execute("""
             SELECT
                 COUNT(*),
@@ -163,7 +191,7 @@ for merchant_id in merchant_ids:
                 COALESCE(
                     SUM(
                         CASE
-                            WHEN payment_method = 'cash'
+                            WHEN payment_method = 'digital'
                             THEN amount_zar
                             ELSE 0
                         END
@@ -174,20 +202,21 @@ for merchant_id in merchant_ids:
             WHERE merchant_id = ?
                 AND transaction_date >= ?
                 AND transaction_date < ?
-        """,(
+                AND is_voided = 0
+        """, (
             merchant_id,
             period_start,
             period_end
         ))
-        
+
         (
             transaction_count,
             total_revenue,
             average_transaction,
             cash_revenue,
             digital_revenue
-        )= cursor.fetchone()
-        
+        ) = cursor.fetchone()
+
         revenue_growth_pct = None
         if (
             previous_revenue is not None
@@ -195,17 +224,17 @@ for merchant_id in merchant_ids:
         ):
             revenue_growth_pct = round(
                 (
-                    (total_revenue-previous_revenue)/ previous_revenue
+                    (total_revenue - previous_revenue) / previous_revenue
                 ) * 100,
                 2
             )
-        
+
         monthly_revenues.append(total_revenue)
         revenue_volatility = None
-        
+
         if len(monthly_revenues) >= 2:
-            revenue_volatility = round(statistics.stdev(monthly_revenues),2)
-        snapshot_id = f"FS{snapshot_number:03d}"
+            revenue_volatility = round(statistics.stdev(monthly_revenues), 2)
+        snapshot_id = f"F{snapshot_number:03d}"
         cursor.execute("""
             INSERT INTO financial_snapshots(
                 snapshot_id,
@@ -221,21 +250,21 @@ for merchant_id in merchant_ids:
                 revenue_volatility
             )
             VALUES (?,?,?,?,?,?,?,?,?,?,?)
-        """,(
+        """, (
             snapshot_id,
             merchant_id,
             period_start.date(),
-            (period_end-timedelta(days=1)).date(),
-            round(total_revenue,2),
+            (period_end - timedelta(days=1)).date(),
+            round(total_revenue, 2),
             transaction_count,
-            round(average_transaction,2),
-            round(cash_revenue,2),
-            round(digital_revenue,2),
+            round(average_transaction, 2),
+            round(cash_revenue, 2),
+            round(digital_revenue, 2),
             revenue_growth_pct,
             revenue_volatility
         ))
-        
-        previous_revenue= total_revenue
+
+        previous_revenue = total_revenue
         snapshot_number += 1
 
 conn.commit()
