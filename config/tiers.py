@@ -6,7 +6,7 @@ TIER_DAILY_VALUE_LIMITS = {
     Tier.FULL: float("inf"),
 }
 
-def has_reached_limit(merchant_id: str, tier: Tier, conn) -> bool:
+def has_reached_limit(merchant_id: str, tier: Tier, conn):
     limit = TIER_DAILY_VALUE_LIMITS[tier]
     if limit == float("inf"):
         return False
