@@ -20,6 +20,18 @@ def get_merchant_by_number(whatsapp_number: str, conn) -> Merchant | None:
         tier=row[4],
         created_at=row[5]
     )
+    
+def generate_next_transaction_id(conn) -> str:
+    cursor = conn.execute(
+        "SELECT transaction_id FROM transactions ORDER BY transaction_id DESC LIMIT 1"
+    )
+    row = cursor.fetchone()
+
+    if row is None:
+        return "T001"
+
+    last_number = int(row[0][1:])
+    return f"T{last_number + 1:03d}"
 
 def generate_next_merchant_id(conn) -> str:
     cursor = conn.execute(
