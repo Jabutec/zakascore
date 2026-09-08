@@ -1,6 +1,6 @@
 import sqlite3
 
 conn = sqlite3.connect("data/zakascore.db")
-cursor = conn.execute("SELECT * FROM merchants WHERE whatsapp_number = '+27821234567';")
+cursor = conn.execute("SELECT * FROM transactions WHERE merchant_id = 'M011';")
 print(cursor.fetchall())
 conn.close()
