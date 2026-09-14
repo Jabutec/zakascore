@@ -35,6 +35,8 @@ class Transaction(BaseModel):
     transaction_id: TransactionID
     merchant_id: MerchantID
     source_id: SourceID
+    offering_id: str | None = None
+    quantity: int | None = None
     input_type: InputType | None = None
     amount_zar: float = Field(gt=0)
     payment_method: PaymentMethod | None = None
@@ -49,6 +51,11 @@ class Transaction(BaseModel):
             raise ValueError(
                 f"payment_method is required for input_type '{self.input_type}'"
             )
+        if self.input_type == InputType.WHATSAPP:
+            if self.offering_id is None or self.quantity is None:
+                raise ValueError(
+                    "offering_id and quantity are required for whatsapp transactions"
+                )
         return self
 
 class Merchant(BaseModel):

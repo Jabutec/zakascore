@@ -33,10 +33,22 @@ def init_database():
         """)
     
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS offerings(
+        offering_id TEXT PRIMARY KEY,
+        merchant_id TEXT NOT NULL,
+        offering_name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (merchant_id) REFERENCES merchants(merchant_id)
+    );
+    """)
+    
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS transactions(
             transaction_id TEXT PRIMARY KEY,
             merchant_id TEXT NOT NULL,
             source_id TEXT NOT NULL,
+            offering_id TEXT,
+            quantity INTEGER,
             input_type TEXT CHECK (input_type IN ('pos_tap', 'voice', 'manual', 'whatsapp')),
             amount_zar REAL NOT NULL CHECK(amount_zar >=0),
             payment_method TEXT CHECK (payment_method IN ('cash', 'digital')),
@@ -45,7 +57,8 @@ def init_database():
             is_voided INTEGER NOT NULL DEFAULT 0 CHECK(is_voided IN (0, 1)),
             transaction_date DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (merchant_id) REFERENCES merchants(merchant_id),
-            FOREIGN KEY (source_id) REFERENCES data_sources(source_id)
+            FOREIGN KEY (source_id) REFERENCES data_sources(source_id),
+            FOREIGN KEY (offering_id) REFERENCES offerings(offering_id)
         );
         """)
     
