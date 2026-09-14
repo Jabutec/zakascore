@@ -5,7 +5,8 @@ import sqlite3
 import os
 
 from settings.onboarding import get_merchant_by_number, create_merchant, generate_next_transaction_id
-from services.parser import extract_amount
+from services.parser import extract_transaction_details
+from services.offerings import get_or_create_offering
 from services.transcription import transcribe_audio
 from config.tiers import has_reached_limit
 from validation.models import Transaction, InputType
@@ -55,13 +56,18 @@ async def whatsapp_webhook(
     else:
         text = Body
 
-    amount = extract_amount(text)
+    details = extract_transaction_details(text)
 
-    if amount is None:
+    if details is None:
         conn.close()
         return PlainTextResponse(
-            "We couldn't log that — please send just the amount you made, e.g. 300"
+            "We couldn't log that — please tell us what you sold and for how much, "
+            "e.g. 'sold 2 shirts for 300'"
         )
+
+    offering_id = get_or_create_offering(merchant.merchant_id, details["item"], conn)
+    amount = details["amount"]
+    quantity = details["quantity"]
 
     transaction = Transaction(
     transaction_id=generate_next_transaction_id(conn),
@@ -69,16 +75,20 @@ async def whatsapp_webhook(
     source_id="S005",
     input_type=InputType.WHATSAPP,
     amount_zar=amount,
+    offering_id=offering_id,
+    quantity=quantity,
     raw_message=text,
     transaction_date=datetime.now()
-)
+
+    )
 
     conn.execute(
-        """INSERT INTO transactions 
-           (transaction_id, merchant_id, source_id, input_type, amount_zar, raw_message)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (transaction.transaction_id, transaction.merchant_id, transaction.source_id,
-         transaction.input_type.value, transaction.amount_zar, transaction.raw_message)
+    """INSERT INTO transactions 
+       (transaction_id, merchant_id, source_id, input_type, amount_zar, offering_id, quantity, raw_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+    (transaction.transaction_id, transaction.merchant_id, transaction.source_id,
+     transaction.input_type.value, transaction.amount_zar, transaction.offering_id,
+     transaction.quantity, transaction.raw_message)
     )
     conn.commit()
     conn.close()
