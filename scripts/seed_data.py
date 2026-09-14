@@ -76,6 +76,27 @@ cursor.execute("""
 source_ids = [row[0] for row in cursor.fetchall()]
 
 
+# Seed offerings data — a handful of realistic items/services per merchant
+sample_offerings = [
+    "shirt", "dress", "haircut", "manicure", "phone case",
+    "airtime", "bread", "cooldrink", "hair extension", "makeup session"
+]
+
+offering_ids_by_merchant = {}
+
+for merchant_id in merchant_ids:
+    chosen_offerings = random.sample(sample_offerings, k=random.randint(2, 4))
+    offering_ids_by_merchant[merchant_id] = []
+
+    for idx, offering_name in enumerate(chosen_offerings, start=1):
+        offering_id = f"O{(int(merchant_id[1:]) * 10) + idx:03d}"
+        cursor.execute(
+            "INSERT INTO offerings (merchant_id, offering_id, offering_name) VALUES (?, ?, ?)",
+            (merchant_id, offering_id, offering_name)
+        )
+        offering_ids_by_merchant[merchant_id].append(offering_id)
+
+
 # Seed transactions data
 for i in range(1, 301):
     transaction_id = f"T{i:04d}"
@@ -90,14 +111,19 @@ for i in range(1, 301):
     amount_zar = round(random.uniform(50, 5000), 2)
 
     # whatsapp transactions never carry a payment_method (matches the
-    # Transaction model's conditional validator)
+    # Transaction model's conditional validator), but they DO carry an
+    # offering + quantity now
     if input_type == "whatsapp":
         payment_method = None
+        offering_id = random.choice(offering_ids_by_merchant[merchant_id])
+        quantity = random.randint(1, 5)
     else:
         payment_method = random.choice([
             "cash",
             "digital"
         ])
+        offering_id = None
+        quantity = None
 
     raw_message = None
     whatsapp_message_id = None
@@ -118,6 +144,8 @@ for i in range(1, 301):
             transaction_id,
             merchant_id,
             source_id,
+            offering_id,
+            quantity,
             input_type,
             amount_zar,
             payment_method,
@@ -126,11 +154,13 @@ for i in range(1, 301):
             is_voided,
             transaction_date
         )
-        VALUES (?,?,?,?,?,?,?,?,?,?);
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
     """, (
         transaction_id,
         merchant_id,
         source_id,
+        offering_id,
+        quantity,
         input_type,
         amount_zar,
         payment_method,
