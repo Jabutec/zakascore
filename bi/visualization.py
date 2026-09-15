@@ -41,3 +41,18 @@ def prepare_payment_method_data(payment_method_data):
         }
         for method, amount in payment_method_data.items()
     ]
+
+def prepare_top_offerings_data(merchant_id, conn):
+    cursor = conn.execute("""
+        SELECT o.offering_name, SUM(t.amount_zar) as total_revenue, SUM(t.quantity) as total_quantity
+        FROM transactions t
+        JOIN offerings o ON t.offering_id = o.offering_id
+        WHERE t.merchant_id = ? AND t.is_voided = 0
+        GROUP BY o.offering_name
+        ORDER BY total_revenue DESC
+    """, (merchant_id,))
+    return [
+        {"offering": row[0], "revenue": row[1], "quantity": row[2]}
+        for row in cursor.fetchall()
+    ]
+    
