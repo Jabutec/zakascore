@@ -44,7 +44,7 @@ async def whatsapp_webhook(
         conn.close()
         return PlainTextResponse(reply)
 
-    if has_reached_limit(merchant.merchant_id, merchant.tier, conn):
+    if has_reached_limit(merchant.merchant_id, merchant.tier, merchant.created_at, conn):
         conn.close()
         return PlainTextResponse("Transaction not recorded — you've reached your daily limit.")
 

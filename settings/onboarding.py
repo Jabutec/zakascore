@@ -53,7 +53,7 @@ def create_merchant(whatsapp_number: str, business_name: str, conn):
         business_name=business_name,
         whatsapp_number=whatsapp_number,
         location="",
-        tier=Tier.FREE
+        tier=Tier.INSIGHTS
     )
 
     conn.execute(

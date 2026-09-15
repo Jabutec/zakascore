@@ -18,7 +18,7 @@ def init_database():
       business_name TEXT NOT NULL,
       whatsapp_number TEXT NOT NULL UNIQUE,
       location TEXT,
-      tier TEXT NOT NULL DEFAULT 'free' CHECK(tier IN ('free', 'insights', 'full')),
+      tier TEXT NOT NULL DEFAULT 'insights' CHECK(tier IN ('insights', 'full')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)

@@ -20,7 +20,6 @@ class PaymentMethod(str, Enum):
     DIGITAL = "digital"
 
 class Tier(str, Enum):
-    FREE = "free"
     INSIGHTS = "insights"
     FULL = "full"
 
@@ -63,7 +62,7 @@ class Merchant(BaseModel):
     business_name: str
     whatsapp_number: WhatsAppNumber
     location: str
-    tier: Tier = Tier.FREE
+    tier: Tier = Tier.INSIGHTS
     created_at: datetime | None = None
 
 class DataSource(BaseModel):

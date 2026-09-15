@@ -34,7 +34,7 @@ for i in range(1, 11):
         fake.company(),
         f"+27{random.randint(600000000, 899999999)}",
         fake.city(),
-        random.choice(["free", "insights", "full"])
+        random.choice(["insights", "full"])
     ))
 
 cursor.execute("SELECT merchant_id FROM merchants")
