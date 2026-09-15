@@ -1,20 +1,44 @@
+from datetime import date, datetime, timedelta
 from validation.models import Tier
 
-TIER_DAILY_VALUE_LIMITS = {
-    Tier.FREE: 500,
-    Tier.INSIGHTS: 2000,
-    Tier.FULL: float("inf"),
-}
+TRIAL_DAYS = 30
+INSIGHTS_WEEKLY_TRANSACTION_LIMIT = 10
 
-def has_reached_limit(merchant_id: str, tier: Tier, conn):
-    limit = TIER_DAILY_VALUE_LIMITS[tier]
-    if limit == float("inf"):
+
+def is_in_trial(merchant_created_at: str) -> bool:
+    created = datetime.fromisoformat(merchant_created_at)
+    return (datetime.now() - created).days < TRIAL_DAYS
+
+
+def get_calendar_week_start(today: date) -> date:
+    return today - timedelta(days=today.weekday())  # Monday = 0
+
+
+def has_reached_limit(merchant_id: str, tier: Tier, merchant_created_at: str, conn) -> bool:
+    if is_in_trial(merchant_created_at):
         return False
-    
+
+    if tier == Tier.FULL:
+        return False
+
+    if tier == Tier.INSIGHTS:
+        week_start = get_calendar_week_start(date.today())
+        cursor = conn.execute(
+            """SELECT COUNT(*) FROM transactions 
+               WHERE merchant_id = ? AND date(transaction_date) >= ? AND is_voided = 0""",
+            (merchant_id, week_start.isoformat())
+        )
+        count = cursor.fetchone()[0]
+        return count >= INSIGHTS_WEEKLY_TRANSACTION_LIMIT
+
+    # FREE tier no longer exists as a separate ongoing state — everyone
+    # starts in trial, then becomes INSIGHTS or FULL. If tier is somehow
+    # still FREE past trial, treat it as INSIGHTS behavior.
+    week_start = get_calendar_week_start(date.today())
     cursor = conn.execute(
-        """SELECT COALESCE(SUM(amount_zar), 0) FROM transactions 
-           WHERE merchant_id = ? AND date(transaction_date) = date('now') AND is_voided = 0""",
-        (merchant_id,)
+        """SELECT COUNT(*) FROM transactions 
+           WHERE merchant_id = ? AND date(transaction_date) >= ? AND is_voided = 0""",
+        (merchant_id, week_start.isoformat())
     )
-    total_today = cursor.fetchone()[0]
-    return total_today >= limit
+    count = cursor.fetchone()[0]
+    return count >= INSIGHTS_WEEKLY_TRANSACTION_LIMIT
