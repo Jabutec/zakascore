@@ -24,6 +24,18 @@ def init_database():
     """)
     
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS otp_codes(
+        otp_id TEXT PRIMARY KEY,
+        merchant_id TEXT NOT NULL,
+        code TEXT NOT NULL,
+        expires_at DATETIME NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (merchant_id) REFERENCES merchants(merchant_id)
+    );
+    """)
+    
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS data_sources(
            source_id TEXT PRIMARY KEY,
            source_name TEXT NOT NULL,
