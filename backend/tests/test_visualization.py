@@ -1,4 +1,4 @@
-from bi.visualization import prepare_revenue_data, prepare_sales_data, prepare_payment_method_data
+from backend.bi.visualization import prepare_revenue_data, prepare_sales_data, prepare_payment_method_data
 
 
 def test_prepare_revenue_data():

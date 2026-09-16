@@ -1,6 +1,6 @@
 from datetime import datetime
-from validation.models import Transaction
-from bi.metrics import (
+from backend.validation.models import Transaction
+from backend.bi.metrics import (
     calculate_total_revenue,
     calculate_transaction_count,
     calculate_average_transaction,

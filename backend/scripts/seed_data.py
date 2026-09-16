@@ -4,7 +4,7 @@ from faker import Faker
 import random
 import statistics
 from datetime import datetime, timedelta
-from utils.helpers import get_month_start, get_next_month
+from backend.utils.helpers import get_month_start, get_next_month
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "..", "data", "zakascore.db")

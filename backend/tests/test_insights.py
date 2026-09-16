@@ -1,6 +1,6 @@
 import pytest
 
-from bi.insights import (
+from backend.bi.insights import (
     generate_revenue_insight,
     generate_stability_insight,
     generate_activity_insight,

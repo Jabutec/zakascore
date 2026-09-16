@@ -1,7 +1,7 @@
 from datetime import date, datetime
 import pytest
 from pydantic import ValidationError
-from validation.models import(
+from backend.validation.models import(
     Transaction,
     Merchant,
     DataSource,
