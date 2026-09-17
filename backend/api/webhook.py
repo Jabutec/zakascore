@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Form
 from fastapi.responses import PlainTextResponse
 from datetime import datetime
+from api.auth import router as auth_router
 import sqlite3
 import os
 
@@ -12,6 +13,7 @@ from config.tiers import has_reached_limit
 from validation.models import Transaction, InputType
 
 app = FastAPI()
+app.include_router(auth_router)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "zakascore.db")
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
