@@ -1,9 +1,42 @@
+import os
 import random
 import string
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+from twilio.rest import Client
+import jwt
+
+
+load_dotenv()
 
 
 OTP_EXPIRY_MINUTES = 5
+TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+TWILIO_WHATSAPP_NUMBER = os.environ.get("TWILIO_WHATSAPP_NUMBER")  # e.g. "whatsapp:+14155238886" for sandbox
+
+twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+
+JWT_SECRET = os.environ.get("JWT_SECRET")
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_HOURS = 24
+
+def create_access_token(merchant_id: str) -> str:
+    payload = {
+        "merchant_id": merchant_id,
+        "exp": datetime.now() + timedelta(hours=JWT_EXPIRY_HOURS)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def verify_access_token(token: str) -> str | None:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload["merchant_id"]
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
 
 
 def generate_otp_id(conn) -> str:
@@ -66,3 +99,9 @@ def verify_otp(merchant_id: str, submitted_code: str, conn) -> bool:
     conn.commit()
 
     return True
+
+
+def send_otp_via_whatsapp(whatsapp_number: str, code: str) -> None:
+    # TEMPORARY: real WhatsApp sending deferred until Twilio vs Meta 
+    # is decided and an approved Authentication Template exists.
+    print(f"[DEV MODE] OTP for {whatsapp_number}: {code}")

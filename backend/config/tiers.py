@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta
-from backend.validation.models import Tier
+from validation.models import Tier
 
 TRIAL_DAYS = 30
 INSIGHTS_WEEKLY_TRANSACTION_LIMIT = 10

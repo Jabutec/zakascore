@@ -1,4 +1,4 @@
-from backend.validation.models import Merchant, Tier
+from validation.models import Merchant, Tier
 
 
 def get_merchant_by_number(whatsapp_number: str, conn) -> Merchant | None:

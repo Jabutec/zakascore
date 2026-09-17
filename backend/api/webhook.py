@@ -4,12 +4,12 @@ from datetime import datetime
 import sqlite3
 import os
 
-from backend.settings.onboarding import get_merchant_by_number, create_merchant, generate_next_transaction_id
-from backend.services.parser import extract_transaction_details
-from backend.services.offerings import get_or_create_offering
-from backend.services.transcription import transcribe_audio
-from backend.config.tiers import has_reached_limit
-from backend.validation.models import Transaction, InputType
+from settings.onboarding import get_merchant_by_number, create_merchant, generate_next_transaction_id
+from services.parser import extract_transaction_details
+from services.offerings import get_or_create_offering
+from services.transcription import transcribe_audio
+from config.tiers import has_reached_limit
+from validation.models import Transaction, InputType
 
 app = FastAPI()
 
