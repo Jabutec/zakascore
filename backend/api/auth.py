@@ -4,6 +4,7 @@ from fastapi import APIRouter, Form, Header, HTTPException, Depends
 
 from services.onboarding import get_merchant_by_number
 from services.auth import create_otp, verify_otp, send_otp_via_whatsapp, create_access_token, verify_access_token
+from bi.visualization import prepare_revenue_data, prepare_top_offerings_data
 
 router = APIRouter()
 
@@ -91,3 +92,28 @@ async def get_my_transactions(merchant_id: str = Depends(get_current_merchant_id
         }
         for row in rows
     ]
+
+@router.get("/api/revenue")
+async def get_my_revenue(merchant_id: str = Depends(get_current_merchant_id)):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.execute(
+        """SELECT date(transaction_date) as day, SUM(amount_zar) as total
+           FROM transactions
+           WHERE merchant_id = ? AND is_voided = 0
+           GROUP BY date(transaction_date)
+           ORDER BY day ASC""",
+        (merchant_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    revenue_dict = {row[0]: row[1] for row in rows}
+    return prepare_revenue_data(revenue_dict)
+
+
+@router.get("/api/top-offerings")
+async def get_my_top_offerings(merchant_id: str = Depends(get_current_merchant_id)):
+    conn = sqlite3.connect(DB_PATH)
+    result = prepare_top_offerings_data(merchant_id, conn)
+    conn.close()
+    return result
