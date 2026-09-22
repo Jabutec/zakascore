@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
 import os
 
-from settings.onboarding import get_merchant_by_number, create_merchant, generate_next_transaction_id
+from services.onboarding import get_merchant_by_number, create_merchant, generate_next_transaction_id
 from services.parser import extract_transaction_details
 from services.offerings import get_or_create_offering
 from services.transcription import transcribe_audio

@@ -1,9 +1,9 @@
 import os
 import sqlite3
-from fastapi import APIRouter, Form
+from fastapi import APIRouter, Form, Header, HTTPException, Depends
 
-from settings.onboarding import get_merchant_by_number
-from services.auth import create_otp, verify_otp, send_otp_via_whatsapp, create_access_token
+from services.onboarding import get_merchant_by_number
+from services.auth import create_otp, verify_otp, send_otp_via_whatsapp, create_access_token, verify_access_token
 
 router = APIRouter()
 
@@ -52,3 +52,42 @@ async def verify_otp_route(phone_number: str = Form(...), code: str = Form(...))
 
     token = create_access_token(merchant.merchant_id)
     return {"access_token": token}
+
+
+def get_current_merchant_id(authorization: str = Header(...)) -> str:
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+
+    token = authorization.replace("Bearer ", "")
+    merchant_id = verify_access_token(token)
+
+    if merchant_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    return merchant_id
+
+
+@router.get("/api/transactions")
+async def get_my_transactions(merchant_id: str = Depends(get_current_merchant_id)):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.execute(
+        """SELECT transaction_id, amount_zar, quantity, raw_message, transaction_date
+           FROM transactions
+           WHERE merchant_id = ? AND is_voided = 0
+           ORDER BY transaction_date DESC
+           LIMIT 20""",
+        (merchant_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [
+        {
+            "transaction_id": row[0],
+            "amount_zar": row[1],
+            "quantity": row[2],
+            "raw_message": row[3],
+            "transaction_date": row[4],
+        }
+        for row in rows
+    ]
