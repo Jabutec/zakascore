@@ -5,6 +5,7 @@ from fastapi import APIRouter, Form, Header, HTTPException, Depends
 from services.onboarding import get_merchant_by_number
 from services.auth import create_otp, verify_otp, send_otp_via_whatsapp, create_access_token, verify_access_token
 from bi.visualization import prepare_revenue_data, prepare_top_offerings_data
+from bi.overview import get_business_overview
 
 router = APIRouter()
 
@@ -115,5 +116,12 @@ async def get_my_revenue(merchant_id: str = Depends(get_current_merchant_id)):
 async def get_my_top_offerings(merchant_id: str = Depends(get_current_merchant_id)):
     conn = sqlite3.connect(DB_PATH)
     result = prepare_top_offerings_data(merchant_id, conn)
+    conn.close()
+    return result
+
+@router.get("/api/overview")
+async def get_my_overview(merchant_id: str = Depends(get_current_merchant_id)):
+    conn = sqlite3.connect(DB_PATH)
+    result = get_business_overview(merchant_id, conn)
     conn.close()
     return result
