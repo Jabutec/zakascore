@@ -6,6 +6,9 @@ from services.onboarding import get_merchant_by_number
 from services.auth import create_otp, verify_otp, send_otp_via_whatsapp, create_access_token, verify_access_token
 from bi.visualization import prepare_revenue_data, prepare_top_offerings_data
 from bi.overview import get_business_overview
+from bi.visualization import prepare_payment_method_data
+from services.credit_scoring import get_merchant_credit_score
+from datetime import date, timedelta
 
 router = APIRouter()
 
@@ -125,3 +128,35 @@ async def get_my_overview(merchant_id: str = Depends(get_current_merchant_id)):
     result = get_business_overview(merchant_id, conn)
     conn.close()
     return result
+
+@router.get("/api/payment-methods")
+async def get_my_payment_methods(merchant_id: str = Depends(get_current_merchant_id)):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.execute(
+        """SELECT payment_method, SUM(amount_zar) as total
+           FROM transactions
+           WHERE merchant_id = ? AND is_voided = 0 AND payment_method IS NOT NULL
+           GROUP BY payment_method""",
+        (merchant_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    payment_dict = {row[0]: row[1] for row in rows}
+    return prepare_payment_method_data(payment_dict)
+
+@router.get("/api/credit-score")
+async def get_my_credit_score(merchant_id: str = Depends(get_current_merchant_id)):
+    conn = sqlite3.connect(DB_PATH)
+
+    today = date.today()
+    period_start = (today.replace(day=1)).isoformat()
+    period_end = today.isoformat()
+
+    try:
+        score = get_merchant_credit_score(merchant_id, period_start, period_end, conn)
+    except ValueError:
+        score = None
+
+    conn.close()
+    return {"credit_score": score}
