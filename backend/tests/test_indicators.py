@@ -1,5 +1,5 @@
 import pytest
-from backend.bi.indicators import (
+from bi.indicators import (
     calculate_transaction_activity,
     determine_activity_status,
     determine_digital_payment_adoption,
