@@ -7,7 +7,7 @@ __pycache__/
 *.pyc
  
 # Database 
-data/*.db
+backend/data/*.db
  
 # Environment variables
 .env
@@ -15,3 +15,5 @@ data/*.db
 # OS 
 .DS_Store
 .vscode/
+
+
