@@ -285,9 +285,27 @@ export default function DashboardView({
           <section className="metric-grid" aria-label="Business performance metrics" id="score-overview">
             <article className="metric-card score-card">
               <div className="metric-label"><span>ZakaScore</span><span className="metric-icon"><Icon name="scores" size={17} /></span></div>
-              <div className="metric-value">{score === null ? "—" : score.toFixed(0)}<span className="metric-unit">/ 100</span></div>
+              <div
+                className="score-gauge"
+                role="img"
+                aria-label={score === null ? "Credit score unavailable" : `Credit score ${score.toFixed(0)} out of 100`}
+              >
+                <svg className="score-gauge-arc" viewBox="0 0 124 76" aria-hidden="true">
+                  <path className="score-gauge-track" d="M 8 68 A 54 54 0 0 1 116 68" pathLength="100" />
+                  <path
+                    className="score-gauge-progress"
+                    d="M 8 68 A 54 54 0 0 1 116 68"
+                    pathLength="100"
+                    strokeDasharray="100"
+                    strokeDashoffset={100 - (score === null ? 0 : Math.min(Math.max(score, 0), 100))}
+                  />
+                </svg>
+                <div className="score-gauge-value">
+                  <strong>{score === null ? "—" : score.toFixed(0)}</strong>
+                  <span>/ 100</span>
+                </div>
+              </div>
               <div className="metric-footnote"><span className="metric-accent"><Icon name="trend" size={14} /> Credit health</span><span>Current score</span></div>
-              <div className="score-track"><span style={{ width: `${score === null ? 0 : Math.min(Math.max(score, 0), 100)}%` }} /></div>
             </article>
             <article className="metric-card">
               <div className="metric-label"><span>Total revenue</span><span className="metric-icon"><Icon name="data" size={17} /></span></div>
