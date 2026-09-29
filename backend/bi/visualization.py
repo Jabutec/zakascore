@@ -47,7 +47,8 @@ def prepare_top_offerings_data(merchant_id, conn):
         SELECT o.offering_name, SUM(t.amount_zar) as total_revenue, SUM(t.quantity) as total_quantity
         FROM transactions t
         JOIN offerings o ON t.offering_id = o.offering_id
-        WHERE t.merchant_id = ? AND t.is_voided = 0
+        JOIN stores s ON s.store_id = t.store_id
+        WHERE s.merchant_id = %s AND t.is_voided = FALSE
         GROUP BY o.offering_name
         ORDER BY total_revenue DESC
     """, (merchant_id,))

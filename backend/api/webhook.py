@@ -4,8 +4,8 @@ from datetime import datetime
 from api.auth import router as auth_router
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import sqlite3
 import os
+from database.connection import get_db as get_connection
 
 from services.onboarding import get_merchant_by_number, create_merchant, generate_next_transaction_id
 from services.parser import extract_transaction_details
@@ -29,13 +29,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "zakascore.db")
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
 
 
 def get_db():
-    return sqlite3.connect(DB_PATH)
+    return get_connection()
 
 
 @app.post("/webhook")
@@ -81,30 +80,37 @@ async def whatsapp_webhook(
             "e.g. 'sold 2 shirts for 300'"
         )
 
-    offering_id = get_or_create_offering(merchant.merchant_id, details["item"], conn)
+    offering_id = get_or_create_offering(merchant.store_id, details["item"], conn)
     amount = details["amount"]
     quantity = details["quantity"]
 
     transaction = Transaction(
-    transaction_id=generate_next_transaction_id(conn),
-    merchant_id=merchant.merchant_id,
-    source_id="S005",
-    input_type=InputType.WHATSAPP,
-    amount_zar=amount,
-    offering_id=offering_id,
-    quantity=quantity,
-    raw_message=text,
-    transaction_date=datetime.now()
-
+        transaction_id=generate_next_transaction_id(conn),
+        merchant_id=merchant.merchant_id,
+        source_id=merchant.source_id,
+        input_type=InputType.WHATSAPP,
+        amount_zar=amount,
+        offering_id=offering_id,
+        quantity=quantity,
+        raw_message=text,
+        transaction_date=datetime.now(),
     )
 
     conn.execute(
-    """INSERT INTO transactions 
-       (transaction_id, merchant_id, source_id, input_type, amount_zar, offering_id, quantity, raw_message)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-    (transaction.transaction_id, transaction.merchant_id, transaction.source_id,
-     transaction.input_type.value, transaction.amount_zar, transaction.offering_id,
-     transaction.quantity, transaction.raw_message)
+        """INSERT INTO transactions
+               (transaction_id, store_id, source_id, input_type, amount_zar,
+                offering_id, quantity, raw_message)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+        (
+            transaction.transaction_id,
+            merchant.store_id,
+            transaction.source_id,
+            transaction.input_type.value,
+            transaction.amount_zar,
+            transaction.offering_id,
+            transaction.quantity,
+            transaction.raw_message,
+        ),
     )
     conn.commit()
     conn.close()

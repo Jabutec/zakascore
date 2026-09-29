@@ -1,21 +1,14 @@
-import os
-import psycopg
-from dotenv import load_dotenv
-
-load_dotenv()
-
-DATABASE_URL = os.getenv("DATABASE_URL")
+from database.connection import get_db
 
 
-def init_database():
-    if not DATABASE_URL:
-        raise RuntimeError("DATABASE_URL is not configured")
+def init_database(connection=None):
+    owns_connection = connection is None
+    conn = connection or get_db()
 
-    with psycopg.connect(DATABASE_URL) as conn:
+    try:
         with conn.cursor() as cursor:
             print("Creating ZakaScore PostgreSQL schema...")
 
-            # Merchants
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS merchants (
                     merchant_id TEXT PRIMARY KEY,
@@ -27,7 +20,6 @@ def init_database():
                 );
             """)
 
-            # User ↔ Merchant
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS merchant_users (
                     user_id TEXT NOT NULL,
@@ -42,7 +34,6 @@ def init_database():
                 );
             """)
 
-            # Stores
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS stores (
                     store_id TEXT PRIMARY KEY,
@@ -57,7 +48,6 @@ def init_database():
                 );
             """)
 
-            # Data sources
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS data_sources (
                     source_id TEXT PRIMARY KEY,
@@ -81,7 +71,6 @@ def init_database():
                 );
             """)
 
-            # Offerings
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS offerings (
                     offering_id TEXT PRIMARY KEY,
@@ -94,7 +83,6 @@ def init_database():
                 );
             """)
 
-            # Transactions
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS transactions (
                     transaction_id TEXT PRIMARY KEY,
@@ -129,7 +117,6 @@ def init_database():
                 );
             """)
 
-            # Financial snapshots
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS financial_snapshots (
                     snapshot_id TEXT PRIMARY KEY,
@@ -157,14 +144,39 @@ def init_database():
                 );
             """)
 
-            # Indexes
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_merchant_users_merchant ON merchant_users(merchant_id);")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_stores_merchant ON stores(merchant_id);")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sources_store ON data_sources(store_id);")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_store ON transactions(store_id);")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_source ON transactions(source_id);")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_snapshots_store ON financial_snapshots(store_id);")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_merchant_users_merchant "
+                "ON merchant_users(merchant_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_stores_merchant "
+                "ON stores(merchant_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sources_store "
+                "ON data_sources(store_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_transactions_store "
+                "ON transactions(store_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_transactions_source "
+                "ON transactions(source_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_transactions_date "
+                "ON transactions(transaction_date);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_snapshots_store "
+                "ON financial_snapshots(store_id);"
+            )
+
+        conn.commit()
+    finally:
+        if owns_connection:
+            conn.close()
 
     print("PostgreSQL schema initialized successfully.")
 

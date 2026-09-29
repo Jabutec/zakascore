@@ -10,7 +10,8 @@ def is_in_trial(merchant_created_at) -> bool:
         created = datetime.fromisoformat(merchant_created_at)
     else:
         created = merchant_created_at
-    return (datetime.now() - created).days < TRIAL_DAYS
+    now = datetime.now(created.tzinfo) if created.tzinfo else datetime.now()
+    return (now - created).days < TRIAL_DAYS
 
 
 def get_calendar_week_start(today: date) -> date:
@@ -26,9 +27,13 @@ def has_reached_limit(merchant_id: str, tier: Tier, merchant_created_at: str, co
 
     week_start = get_calendar_week_start(date.today())
     cursor = conn.execute(
-        """SELECT COUNT(*) FROM transactions 
-           WHERE merchant_id = ? AND date(transaction_date) >= ? AND is_voided = 0""",
-        (merchant_id, week_start.isoformat())
+        """SELECT COUNT(*)
+           FROM transactions t
+           JOIN stores s ON s.store_id = t.store_id
+           WHERE s.merchant_id = %s
+             AND (t.transaction_date AT TIME ZONE 'Africa/Johannesburg')::date >= %s
+             AND t.is_voided = FALSE""",
+        (merchant_id, week_start)
     )
     count = cursor.fetchone()[0]
     return count >= INSIGHTS_WEEKLY_TRANSACTION_LIMIT

@@ -93,7 +93,7 @@ A web dashboard provides a visual interface for exploring financial performance,
 - [ ] Online business integrations
 - [ ] WhatsApp data ingestion
 - [ ] Production deployment
-- [ ] Production database
+- [x] Production database
 - [ ] Data quality improvements
 - [ ] Production hardening
 
@@ -118,7 +118,7 @@ A web dashboard provides a visual interface for exploring financial performance,
 | --------------- | ------------------- |
 | Backend         | Python, FastAPI     |
 | Frontend        | Next.js             |
-| Database        | SQLite              |
+| Database       | PostgreSQL          |
 | Data Validation | Pydantic            |
 | Testing         | Pytest              |
 | CI              | GitHub Actions      |
@@ -129,7 +129,7 @@ A web dashboard provides a visual interface for exploring financial performance,
 | ---------- | ------------------- |
 | Backend    | Python / FastAPI    |
 | Frontend   | Next.js             |
-| Database   | SQLite              |
+| Database   | PostgreSQL          |
 | Validation | Pydantic            |
 | Testing    | Pytest              |
 | CI         | GitHub Actions      |
