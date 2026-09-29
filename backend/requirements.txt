@@ -11,3 +11,5 @@ requests
 twilio
 uvicorn
 word2number
+psycopg[binary]
+psycopg-pool
