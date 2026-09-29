@@ -1,6 +1,7 @@
 import statistics
 from datetime import datetime, timedelta
 from collections import namedtuple
+from zoneinfo import ZoneInfo
 
 from bi.metrics import (
     calculate_total_revenue,
@@ -26,17 +27,20 @@ SimpleTransaction = namedtuple("SimpleTransaction", ["amount_zar", "transaction_
 def get_transactions_for_merchant(merchant_id: str, conn) -> list[SimpleTransaction]:
     cursor = conn.execute(
         """SELECT amount_zar, transaction_date, payment_method
-           FROM transactions
-           WHERE merchant_id = ? AND is_voided = 0
-           ORDER BY transaction_date ASC""",
+           FROM transactions t
+           JOIN stores s ON s.store_id = t.store_id
+           WHERE s.merchant_id = %s AND t.is_voided = FALSE
+           ORDER BY t.transaction_date ASC""",
         (merchant_id,)
     )
     rows = cursor.fetchall()
 
     result = []
     for amount, date_str, payment_method in rows:
-        date_obj = datetime.fromisoformat(date_str)
-        result.append(SimpleTransaction(amount, date_obj, payment_method))
+        date_obj = date_str if isinstance(date_str, datetime) else datetime.fromisoformat(date_str)
+        if date_obj.tzinfo is not None:
+            date_obj = date_obj.astimezone(ZoneInfo("Africa/Johannesburg")).replace(tzinfo=None)
+        result.append(SimpleTransaction(float(amount), date_obj, payment_method))
 
     return result
 

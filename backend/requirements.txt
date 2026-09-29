@@ -1,4 +1,5 @@
 fastapi
+psycopg[binary]==3.2.10
 Faker==40.36.0
 matplotlib==3.11.1
 openai

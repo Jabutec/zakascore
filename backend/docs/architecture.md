@@ -51,7 +51,7 @@ ZakaScore is composed of four primary layers, developed in the following order:
 │ application-level business rules before data       │
 │ reaches the database or analytics layer.            │
 ├─────────────────────────────────────────────────────┤
-│ 1. DATABASE — SQLite                                │
+│ 1. DATABASE — PostgreSQL                            │
 │                                                     │
 │ Schema-first storage for merchants, transactions,   │
 │ data sources, and financial snapshots.              │
@@ -71,7 +71,7 @@ The architecture should allow individual implementation details to evolve withou
 
 For example:
 
-- SQLite may eventually be replaced by PostgreSQL.
+- PostgreSQL access is centralized through `database.connection`.
 - Synthetic/manual data may eventually be supplemented by external integrations.
 - New interfaces may consume the same BI engine without duplicating its logic.
 
@@ -93,9 +93,14 @@ For example:
 | DB-6 | Foreign key constraints shall enforce relationships between merchants, transactions, financial snapshots, and data sources where defined. | Must     | Implemented |
 | DB-7 | System shall store periodized financial snapshots associated with merchants.                                                              | Must     | Implemented |
 | DB-8 | Financial snapshot values shall enforce non-negative financial constraints and valid reporting periods.                                   | Must     | Implemented |
-| DB-9 | Schema design should support eventual migration from SQLite to a production relational database.                                          | Should   | Ongoing     |
+| DB-9 | The PostgreSQL schema is initialized centrally and database constraints are enforced.                                                      | Should   | Done        |
 
 **Definition of Done:** The database schema is created through the initialization scripts, relationships and constraints are enforced, and automated tests verify database functionality.
+
+WhatsApp sender lookup uses `data_sources.external_identifier` for rows whose
+`source_type` is `whatsapp`, then follows the source's `store_id` to its merchant.
+Webhook registration creates a merchant, its initial store, and the associated
+WhatsApp data source without adding phone fields or tables outside this schema.
 
 ---
 
@@ -133,9 +138,10 @@ The validation layer acts as the application-level contract between incoming dat
 
 **Current baseline:**
 
-```text
-39 tests passed
-```
+The test suite runs against PostgreSQL and covers database-backed webhook, BI,
+and scoring routes.
+
+**Current baseline:** 111 tests pass against PostgreSQL 16.
 
 The testing foundation will continue to expand as the BI engine and API layers are implemented.
 
@@ -168,7 +174,8 @@ The BI engine is not intended to produce a score alone. Metrics and insights are
 
 **Purpose:** Provide a future programmatic interface to ZakaScore functionality.
 
-The API layer has not yet been implemented.
+The existing FastAPI API exposes the WhatsApp webhook and merchant BI/scoring
+routes. Those data routes remain backed by the existing bearer-token contract.
 
 | ID    | Requirement                                                                                   | Priority | Status  |
 | ----- | --------------------------------------------------------------------------------------------- | -------- | ------- |
@@ -214,7 +221,7 @@ The objective at this stage is to establish a data model capable of supporting t
 | Testability    | Database, validation, and BI logic shall be independently testable.                                                     |
 | Explainability | Scoring calculations shall be deterministic and explainable in V1.0.0.                                                  |
 | Security       | No plaintext passwords, API keys, or other secrets shall be stored in source code.                                      |
-| Portability    | Application logic should avoid unnecessary SQLite-specific dependencies that would prevent future PostgreSQL migration. |
+| Portability    | Application database access uses psycopg-compatible PostgreSQL queries and a centralized connection layer.             |
 | Performance    | BI calculations should remain practical for small-business transaction datasets.                                        |
 | Documentation  | System documentation shall remain synchronized with the as-built architecture and implementation.                       |
 
@@ -235,6 +242,7 @@ To maintain a realistic scope, V1.0.0 excludes:
 - Full authentication and session management
 - Lender-facing dashboards
 - Automated lending decisions
+- OTP request and verification routes (deferred until authentication is configured)
 
 These capabilities may be considered in future versions.
 

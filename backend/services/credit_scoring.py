@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 REVENUE_BENCHMARK_MONTHLY = 10000  # ZAR — top score ceiling for Revenue Level
 
 WEIGHTS = {
@@ -59,36 +60,58 @@ def calculate_credit_score(
     return round(score, 2)
 
 def get_days_with_transactions(merchant_id: str, period_start, period_end, conn) -> int:
+    period_start_date = date.fromisoformat(period_start) if isinstance(period_start, str) else period_start
+    period_end_date = date.fromisoformat(period_end) if isinstance(period_end, str) else period_end
+    local_timezone = ZoneInfo("Africa/Johannesburg")
     cursor = conn.execute(
-        """SELECT COUNT(DISTINCT date(transaction_date))
-           FROM transactions
-           WHERE merchant_id = ?
-             AND transaction_date >= ?
-             AND transaction_date < ?
-             AND is_voided = 0""",
-        (merchant_id, period_start, period_end)
+        """SELECT COUNT(DISTINCT
+                          (t.transaction_date AT TIME ZONE 'Africa/Johannesburg')::date)
+           FROM transactions t
+           JOIN stores s ON s.store_id = t.store_id
+           WHERE s.merchant_id = %s
+             AND t.transaction_date >= %s
+             AND t.transaction_date < %s
+             AND t.is_voided = FALSE""",
+        (
+            merchant_id,
+            datetime.combine(period_start_date, time.min, local_timezone),
+            datetime.combine(period_end_date, time.min, local_timezone),
+        )
     )
     return cursor.fetchone()[0]
 
 def get_merchant_credit_score(merchant_id: str, period_start, period_end, conn):
+    period_start_date = (
+        date.fromisoformat(period_start) if isinstance(period_start, str) else period_start
+    )
+    period_end_date = (
+        date.fromisoformat(period_end) if isinstance(period_end, str) else period_end
+    )
     cursor = conn.execute(
-        """SELECT total_revenue_zar, revenue_growth_pct, revenue_volatility
-           FROM financial_snapshots
-           WHERE merchant_id = ?
-             AND period_start = ?
-             AND period_end = ?""",
-        (merchant_id, period_start, period_end)
+        """SELECT SUM(fs.total_revenue_zar), AVG(fs.revenue_growth_pct),
+                  AVG(fs.revenue_volatility)
+           FROM financial_snapshots fs
+           JOIN stores s ON s.store_id = fs.store_id
+           WHERE s.merchant_id = %s
+             AND fs.period_start = %s
+             AND fs.period_end = %s""",
+        (merchant_id, period_start_date, period_end_date)
     )
     row = cursor.fetchone()
 
-    if row is None:
+    if row is None or row[0] is None:
         raise ValueError(f"No financial snapshot found for {merchant_id} in this period")
 
-    total_revenue_zar, revenue_growth_pct, revenue_volatility = row
+    total_revenue_zar, revenue_growth_pct, revenue_volatility = (
+        float(value) if value is not None else None for value in row
+    )
 
-    days_with_transactions = get_days_with_transactions(merchant_id, period_start, period_end, conn)
-    period_start_date = date.fromisoformat(period_start)
-    period_end_date = date.fromisoformat(period_end)
+    days_with_transactions = get_days_with_transactions(
+        merchant_id,
+        period_start_date,
+        period_end_date,
+        conn,
+    )
     total_days_in_period = (period_end_date - period_start_date).days
 
     return calculate_credit_score(

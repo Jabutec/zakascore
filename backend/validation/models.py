@@ -64,6 +64,8 @@ class Merchant(BaseModel):
     location: str
     tier: Tier = Tier.INSIGHTS
     created_at: datetime | None = None
+    store_id: str | None = None
+    source_id: SourceID | None = None
 
 class DataSource(BaseModel):
     source_id: SourceID
