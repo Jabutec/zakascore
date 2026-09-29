@@ -4,6 +4,7 @@ from database.connection import get_db
 def init_database(connection=None):
     owns_connection = connection is None
     conn = connection or get_db()
+
     try:
         with conn.cursor() as cursor:
             print("Creating ZakaScore PostgreSQL schema...")
@@ -148,10 +149,12 @@ def init_database(connection=None):
                 "ON merchant_users(merchant_id);"
             )
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_stores_merchant ON stores(merchant_id);"
+                "CREATE INDEX IF NOT EXISTS idx_stores_merchant "
+                "ON stores(merchant_id);"
             )
             cursor.execute(
-                "CREATE INDEX IF NOT EXISTS idx_sources_store ON data_sources(store_id);"
+                "CREATE INDEX IF NOT EXISTS idx_sources_store "
+                "ON data_sources(store_id);"
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_transactions_store "
@@ -169,10 +172,12 @@ def init_database(connection=None):
                 "CREATE INDEX IF NOT EXISTS idx_snapshots_store "
                 "ON financial_snapshots(store_id);"
             )
+
         conn.commit()
     finally:
         if owns_connection:
             conn.close()
+
     print("PostgreSQL schema initialized successfully.")
 
 
