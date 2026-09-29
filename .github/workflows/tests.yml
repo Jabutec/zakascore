@@ -24,6 +24,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Initialize test database
+        working-directory: backend
+        run: python -m scripts.init_db
+
       - name: Run tests
         working-directory: backend
         run: python -m pytest
