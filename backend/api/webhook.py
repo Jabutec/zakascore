@@ -3,6 +3,7 @@ from fastapi.responses import PlainTextResponse
 from datetime import datetime
 from api.auth import router as auth_router
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 import sqlite3
 import os
 
@@ -13,12 +14,16 @@ from services.transcription import transcribe_audio
 from config.tiers import has_reached_limit
 from validation.models import Transaction, InputType
 
+load_dotenv()
+
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
 app = FastAPI()
 app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
