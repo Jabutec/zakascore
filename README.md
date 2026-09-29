@@ -1,104 +1,148 @@
-# ZakaScore
+<p align="center">
+  <img src="frontend/public/zakascore.png" alt="ZakaScore Logo" width="140">
+</p>
 
-**ZakaScore is a financial intelligence platform being built for small and medium-sized businesses in South Africa.**
+<h1 align="center">ZakaScore</h1>
 
-The platform is designed to help businesses turn their financial and operational data into useful business insights, while creating a structured financial profile that can potentially support access to credit.
+<p align="center">
+  Financial intelligence for businesses with more data than they have records.
+</p>
 
-ZakaScore is being developed with the needs of small businesses and sole entrepreneurs in mind, particularly businesses that may not have access to sophisticated financial analytics.
+## Core Features
 
-## Current Development
+ZakaScore is a localized financial data ingestion and alternative credit scoring engine designed for the South African SME ecosystem.
 
-ZakaScore is currently focused on building a reliable data foundation for the platform.
+It turns everyday business activity into structured financial data, business insights, and alternative credit signals — helping create a clearer financial profile for businesses that may have limited traditional records.
 
-Current work includes:
+---
 
-- SQLite database architecture
-- Structured financial data schemas
-- Pydantic data models
-- Data validation
-- Automated testing
-- Merchant data management
-- Financial snapshot modelling
-- Data source modelling
+## Core Features
 
-The BI engine is the next major development stage.
+### Multi-Source Financial Data
 
-## Technology Stack
+Designed to collect and normalize business activity from different sources, including:
 
-- **Python** — core application logic
-- **SQLite** — database
-- **Pydantic** — data schemas and validation
-- **Pytest** — automated testing
-
-Additional data-analysis and visualization technologies will be introduced as the BI engine develops.
-
-## Data Architecture
-
-The current architecture is designed around the business as the central entity.
-
-Core concepts include:
-
-- **Merchants** — businesses using ZakaScore
-- **Financial Snapshots** — structured representations of business financial performance over a period
-- **Data Sources** — records of where financial data originates
-- **Transactions and financial data** — operational information that can eventually feed the analytics layer
-
-The schema is designed to support multiple data sources and future expansion without tying the platform to a single method of data collection.
-
-## Testing
-
-ZakaScore uses automated tests to protect the data layer and validation rules.
-
-Tests currently cover:
-
-- Database functionality
-- Pydantic model validation
-- Valid model construction
-- Invalid data handling
-- Parameterized validation cases
-
-Run the test suite with:
-
-```bash
-python -m pytest
-```
-
-## Development Roadmap
-
-### Foundation
-
-- [x] Database architecture
-- [x] Core schemas
-- [x] Pydantic models
-- [x] Automated validation tests
-
-### BI Engine
-
-- [x] Financial metric calculations
-- [x] Revenue and growth analysis
-- [x] Business performance indicators
-- [x] Automated business insights
-- [x] Data visualization
-
-### Data Integration
-
-- [ ] Transaction data ingestion
-- [ ] External data sources
-- [ ] Banking and payment integrations
-- [ ] Online business integrations
-- [ ] WhatsApp-based data interaction
+- POS systems
+- Online stores
+- Banking and payment data
+- CSV and structured financial data
+- WhatsApp-based business records
 
 ### Financial Intelligence
 
-- [ ] Business financial profiles
-- [ ] Credit scoring engine
-- [ ] Credit-readiness insights
-- [ ] Decision-support tools
+Transforms business data into useful financial metrics and performance indicators, including:
 
-## Vision
+- Revenue analysis
+- Growth trends
+- Transaction insights
+- Business performance metrics
+- Financial statistics
 
-ZakaScore aims to give small businesses access to financial intelligence that is often available only to larger, more digitally mature businesses.
+### Alternative Credit Scoring
 
-A business should be able to understand its performance, identify opportunities, make better decisions, and build a credible financial history regardless of whether it operates through a sophisticated online platform or primarily through WhatsApp and direct customer interactions.
+Generates an alternative financial score based on the underlying business data and calculated metrics.
 
-**Built by Flexure.**
+The goal is not simply to produce a number, but to provide the financial context behind it.
+
+### Business Dashboard
+
+A web dashboard provides a visual interface for exploring financial performance, metrics, and scoring results.
+
+---
+
+## Development Map
+
+```text
+                    ZakaScore
+                        │
+          ┌─────────────┴─────────────┐
+          │                           │
+    Data Foundation             Intelligence
+          │                           │
+   Data ingestion              Financial metrics
+   Data validation              Business insights
+   Data sources                 Alternative scoring
+          │                           │
+          └─────────────┬─────────────┘
+                        │
+                   Product Layer
+                        │
+                  Web Dashboard
+                        │
+                Deployment & V1
+```
+
+### Current — V1
+
+- [x] Core data architecture
+- [x] Financial data models
+- [x] Data validation
+- [x] Financial metrics
+- [x] Business intelligence
+- [x] Alternative scoring
+- [x] Webhook infrastructure
+- [x] LLM-powered data parsing
+- [x] Web dashboard
+- [x] Automated testing
+- [x] CI pipeline
+
+### Next
+
+- [ ] Additional data integrations
+- [ ] Banking and payment integrations
+- [ ] Online business integrations
+- [ ] WhatsApp data ingestion
+- [ ] Production deployment
+- [ ] Production database
+- [ ] Data quality improvements
+- [ ] Production hardening
+
+---
+
+## Architecture & Stack
+
+### Architecture
+
+| Layer          | Responsibility                                                                  |
+| -------------- | ------------------------------------------------------------------------------- |
+| Data Sources   | Business activity from POS, online stores, financial records, and other sources |
+| Ingestion      | Receives and processes incoming business data                                   |
+| Validation     | Structures and validates incoming data                                          |
+| Financial Data | Stores normalized merchant and financial information                            |
+| Intelligence   | Calculates financial metrics, business insights, and alternative scores         |
+| Dashboard      | Presents financial information and scoring results                              |
+
+### Stack
+
+| Area            | Technology          |
+| --------------- | ------------------- |
+| Backend         | Python, FastAPI     |
+| Frontend        | Next.js             |
+| Database        | SQLite              |
+| Data Validation | Pydantic            |
+| Testing         | Pytest              |
+| CI              | GitHub Actions      |
+| AI              | LLM-powered parsing |
+| Version Control | Git, GitHub         |
+
+| Layer      | Technology          |
+| ---------- | ------------------- |
+| Backend    | Python / FastAPI    |
+| Frontend   | Next.js             |
+| Database   | SQLite              |
+| Validation | Pydantic            |
+| Testing    | Pytest              |
+| CI         | GitHub Actions      |
+| AI         | LLM-powered parsing |
+
+---
+
+## Project Documentation
+
+Detailed documentation covers the project's architecture, data model, API design, development decisions, and implementation details.
+
+**Documentation:** Coming as the project moves toward V1 deployment.
+
+---
+
+**Built by Flexure**
