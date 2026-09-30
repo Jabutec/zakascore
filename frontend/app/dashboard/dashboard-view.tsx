@@ -172,6 +172,7 @@ export default function DashboardView({
 }: DashboardViewProps) {
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState<7 | 30 | 0>(30);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const chartPoints = (() => {
     if (period === 0) return revenue;
@@ -215,7 +216,7 @@ export default function DashboardView({
         <nav className="nav-list">
           {[
             ["overview", "Overview", "#overview"],
-            ["merchants", "Merchants", "#business-portfolio"],
+            ["merchants", "Business", "#business-portfolio"],
             ["data", "Financial data", "#financial-data"],
             ["scores", "Scores", "#score-overview"],
             ["insights", "Insights", "#insights"],
@@ -233,15 +234,15 @@ export default function DashboardView({
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="nav-link nav-link-disabled" aria-disabled="true" title="Settings are not available in this view">
+          <div className="nav-link nav-link-disabled" aria-disabled="true" title="Settings are coming soon">
             <Icon name="settings" />
             <span>Settings</span>
           </div>
           <div className="sidebar-identity">
             <div className="avatar avatar-small">ZS</div>
             <div className="identity-copy">
-              <strong>Merchant account</strong>
-              <span>Business profile</span>
+              <strong>Business profile</strong>
+              <span>Profile details unavailable</span>
             </div>
           </div>
         </div>
@@ -255,19 +256,35 @@ export default function DashboardView({
               <Icon name="search" size={17} />
               <input
                 type="search"
-                aria-label="Search transactions"
-                placeholder="Search activity"
+                aria-label="Search recent transactions"
+                placeholder="Search recent transactions"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
-            <button className="icon-button notification-button" type="button" aria-label="Notifications">
-              <Icon name="bell" size={18} />
-              <span className="notification-dot" />
-            </button>
+            <div className="notification-menu">
+              <button
+                className="icon-button notification-button"
+                type="button"
+                aria-label="Notifications"
+                aria-expanded={showNotifications}
+                aria-controls="notifications-panel"
+                onClick={() => setShowNotifications((visible) => !visible)}
+              >
+                <Icon name="bell" size={18} />
+              </button>
+              <div
+                className="notifications-panel"
+                id="notifications-panel"
+                role="status"
+                hidden={!showNotifications}
+              >
+                Notifications will appear here when available.
+              </div>
+            </div>
             <div className="profile-button" id="profile">
               <span className="avatar">ZS</span>
-              <span className="profile-copy"><strong>Merchant</strong><span>South Africa</span></span>
+              <span className="profile-copy"><strong>Business profile</strong><span>Details unavailable</span></span>
             </div>
           </div>
         </header>
@@ -384,7 +401,7 @@ export default function DashboardView({
           <section className="panel portfolio-panel" id="business-portfolio">
             <div className="section-heading">
               <div><p className="eyebrow">MERCHANT PROFILE</p><h2>Business performance</h2></div>
-              <span className="table-count">1 business</span>
+              <span className="table-count">Current profile</span>
             </div>
             <div className="table-scroll">
               <table className="data-table">
@@ -392,7 +409,7 @@ export default function DashboardView({
                   <th>Business</th><th>ZakaScore</th><th>Revenue</th><th>Transactions</th><th>Average transaction</th><th>Score change</th><th>Status</th>
                 </tr></thead>
                 <tbody><tr>
-                  <td><div className="business-cell"><span className="business-mark">B</span><span><strong>Your business</strong><small>Merchant profile</small></span></div></td>
+                  <td><div className="business-cell"><span className="business-mark">B</span><span><strong>Business profile</strong><small>Profile details unavailable</small></span></div></td>
                   <td><strong className="score-cell">{score === null ? "—" : score.toFixed(0)}</strong></td>
                   <td>{formatCurrency(overview.total_revenue)}</td>
                   <td>{overview.transaction_count.toLocaleString("en-ZA")}</td>
@@ -408,7 +425,7 @@ export default function DashboardView({
             <article className="panel activity-panel" id="financial-data">
               <div className="section-heading">
                 <div><p className="eyebrow">FINANCIAL DATA</p><h2>Recent activity</h2></div>
-                <span className="table-count">{filteredTransactions.length} records</span>
+                <span className="table-count">Showing {filteredTransactions.length} of up to 20 recent records</span>
               </div>
               <div className="table-scroll">
                 <table className="data-table activity-table">
@@ -451,16 +468,14 @@ export default function DashboardView({
               ) : (
                 <p className="empty-message">Offering data will appear as sales are recorded.</p>
               )}
-              {paymentMethods.length > 0 && (
-                <div className="payment-summary">
-                  <p className="eyebrow">PAYMENT CHANNELS</p>
-                  {paymentMethods.map((method) => (
+              <div className="payment-summary">
+                <p className="eyebrow">PAYMENT CHANNELS</p>
+                {paymentMethods.length > 0 ? paymentMethods.map((method) => (
                     <div className="payment-row" key={method.payment_method}>
                       <span>{titleCase(method.payment_method)}</span><strong>{formatCurrency(method.amount)}</strong>
                     </div>
-                  ))}
-                </div>
-              )}
+                  )) : <p className="payment-empty">No payment method data recorded yet.</p>}
+              </div>
             </aside>
           </section>
 
