@@ -399,7 +399,6 @@ a {
   color: var(--foreground);
 }
 
-.notification-dot,
 .live-dot {
   background: var(--emerald-bright);
   border-radius: 50%;
@@ -407,11 +406,28 @@ a {
   width: 7px;
 }
 
-.notification-dot {
-  border: 2px solid #fff;
+.notification-menu {
+  position: relative;
+}
+
+.notifications-panel {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 14px 16px;
   position: absolute;
-  right: 9px;
-  top: 9px;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 240px;
+  z-index: 8;
+}
+
+.notifications-panel[hidden] {
+  display: none;
 }
 
 .profile-button {
@@ -1228,6 +1244,12 @@ a {
   margin: 0 0 2px;
 }
 
+.payment-empty {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
 .page-footer {
   color: var(--foreground);
   display: flex;
@@ -1471,4 +1493,55 @@ a {
   .page-footer {
     gap: 8px;
   }
+}
+
+.dashboard-state {
+  align-items: center;
+  background: #f7f8f7;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.dashboard-state-card {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  max-width: 420px;
+  padding: 36px;
+  text-align: center;
+}
+
+.dashboard-state-card .brand-mark {
+  margin-bottom: 20px;
+}
+
+.dashboard-state-card h1 {
+  color: var(--foreground);
+  font-size: 20px;
+  margin: 0;
+}
+
+.dashboard-state-card p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 10px 0 20px;
+}
+
+.state-retry-button {
+  background: var(--foreground);
+  border: 0;
+  border-radius: var(--radius-md);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 16px;
 }
