@@ -8,8 +8,6 @@
   Financial intelligence for businesses with more data than they have records.
 </p>
 
-## Core Features
-
 ZakaScore is a localized financial data ingestion and alternative credit scoring engine designed for the South African SME ecosystem.
 
 It turns everyday business activity into structured financial data, business insights, and alternative credit signals — helping create a clearer financial profile for businesses that may have limited traditional records.
@@ -118,22 +116,12 @@ A web dashboard provides a visual interface for exploring financial performance,
 | --------------- | ------------------- |
 | Backend         | Python, FastAPI     |
 | Frontend        | Next.js             |
-| Database       | PostgreSQL          |
+| Database        | PostgreSQL          |
 | Data Validation | Pydantic            |
 | Testing         | Pytest              |
 | CI              | GitHub Actions      |
 | AI              | LLM-powered parsing |
 | Version Control | Git, GitHub         |
-
-| Layer      | Technology          |
-| ---------- | ------------------- |
-| Backend    | Python / FastAPI    |
-| Frontend   | Next.js             |
-| Database   | PostgreSQL          |
-| Validation | Pydantic            |
-| Testing    | Pytest              |
-| CI         | GitHub Actions      |
-| AI         | LLM-powered parsing |
 
 ---
 
@@ -141,8 +129,8 @@ A web dashboard provides a visual interface for exploring financial performance,
 
 Detailed documentation covers the project's architecture, data model, API design, development decisions, and implementation details.
 
-**Documentation:** Coming as the project moves toward V1 deployment.
+**Documentation:** [Architecture](backend/docs/architecture.md)
 
 ---
 
-**Built by Flexure**
+**Built by Jabulani Mokoena**

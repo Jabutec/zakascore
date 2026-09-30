@@ -1,332 +1,225 @@
-# ZakaScore — System Requirements Specification
+# ZakaScore Architecture
 
-**Release:** V1.0.0
-**Author:** Jabulani Mokoena
-**Last updated:** 2026-08-22
-**Status:** Database, validation, and automated testing layers implemented — BI engine next
+ZakaScore is a localized financial data ingestion and alternative credit scoring engine designed for the South African SME ecosystem.
 
----
+## System Architecture
 
-## 1. System Purpose
+ZakaScore uses a Next.js frontend, a FastAPI backend, and PostgreSQL hosted on Neon.
 
-ZakaScore is a financial intelligence and business analytics engine for South African SMEs.
+| Layer           | Technology                   | Responsibility                            |
+| --------------- | ---------------------------- | ----------------------------------------- |
+| Frontend        | Next.js, React, Tailwind CSS | Dashboard and user interface              |
+| Backend         | FastAPI, Python              | API, validation, business logic, webhooks |
+| Database        | PostgreSQL, Neon             | Persistent application data               |
+| Database Driver | Psycopg 3                    | Backend-to-database connection            |
+| Testing         | Pytest                       | Automated backend testing                 |
+| CI              | GitHub Actions               | Automated test execution                  |
+| Ingestion       | Twilio / WhatsApp            | Business data input                       |
 
-V1.0.0 is a **backend-first system** focused on establishing the core data and analytics foundation:
+The frontend communicates with FastAPI through HTTP/JSON. The backend is responsible for communicating with PostgreSQL.
 
-**structured business data → validated data → financial metrics → business insights → deterministic scoring**
+## Backend
 
-The system is designed to eventually help small businesses understand their financial performance, make better business decisions, and build a structured financial profile that may support future credit-readiness and lending use cases.
+The FastAPI backend is responsible for:
 
-**V1.0.0 is not:**
+- API endpoints
+- Request validation
+- Data ingestion
+- WhatsApp webhook processing
+- Business intelligence calculations
+- Financial metrics
+- Credit scoring
+- PostgreSQL database access
 
-- a lender
-- a machine-learning credit scoring system
-- a frontend application
-- a live banking/payment integration platform
+The backend is organized into separate areas for APIs, services, BI logic, validation, database access, and tests.
 
-It is the engineered foundation that future interfaces, integrations, and intelligence capabilities will build upon.
+## Database
 
----
+ZakaScore uses PostgreSQL hosted on Neon.
 
-## 2. Architecture Overview
+The main database entities are:
 
-ZakaScore is composed of four primary layers, developed in the following order:
+| Table                 | Purpose                                              |
+| --------------------- | ---------------------------------------------------- |
+| `merchants`           | Businesses using ZakaScore                           |
+| `merchant_users`      | Users associated with merchants and their roles      |
+| `stores`              | Stores or operating locations belonging to merchants |
+| `data_sources`        | Sources from which business data is received         |
+| `offerings`           | Products or services sold by a store                 |
+| `transactions`        | Normalized business transactions                     |
+| `financial_snapshots` | Calculated financial metrics for specific periods    |
+
+### Relationships
+
+A merchant can have multiple users and stores. A store can have multiple data sources, offerings, and transactions.
+
+`merchant_users` handles the relationship between application users and merchants.
+
+`data_sources` identifies where business data originated, such as WhatsApp, POS systems, CSV files, or online stores.
+
+WhatsApp numbers are stored as source identifiers rather than as merchant identity.
+
+## Data Sources
+
+ZakaScore is designed to support multiple sources of business data.
+
+| Source Type           | Example                    |
+| --------------------- | -------------------------- |
+| `pos`                 | Point-of-sale system       |
+| `bank_statement`      | Bank transaction data      |
+| `accounting_software` | Accounting platform        |
+| `online_store`        | E-commerce platform        |
+| `whatsapp`            | WhatsApp business activity |
+| `csv`                 | Imported business data     |
+| `manual`              | Manually entered data      |
+
+This allows WhatsApp to function as one ingestion channel without making it the foundation of the entire system.
+
+## Transactions
+
+Transactions represent normalized business activity.
+
+A transaction can contain:
+
+| Field              | Purpose                                      |
+| ------------------ | -------------------------------------------- |
+| `transaction_id`   | Unique transaction identifier                |
+| `store_id`         | Store associated with the transaction        |
+| `source_id`        | Data source that produced the transaction    |
+| `offering_id`      | Product or service involved                  |
+| `quantity`         | Quantity sold                                |
+| `amount_zar`       | Transaction value                            |
+| `payment_method`   | Cash or digital                              |
+| `input_type`       | How the transaction entered the system       |
+| `raw_message`      | Original input where applicable              |
+| `transaction_date` | Date and time of the transaction             |
+| `is_voided`        | Indicates whether the transaction was voided |
+
+## Business Intelligence
+
+The BI layer converts transaction data into useful business metrics.
+
+The dashboard currently exposes:
+
+| Endpoint                   | Purpose                  |
+| -------------------------- | ------------------------ |
+| `GET /api/transactions`    | Recent transactions      |
+| `GET /api/revenue`         | Revenue data             |
+| `GET /api/top-offerings`   | Top-performing offerings |
+| `GET /api/overview`        | Business overview        |
+| `GET /api/payment-methods` | Payment method breakdown |
+| `GET /api/credit-score`    | Merchant credit score    |
+
+Financial snapshots can contain metrics such as revenue, transaction count, average transaction value, cash revenue, digital revenue, revenue growth, and revenue volatility.
+
+## Credit Scoring
+
+ZakaScore includes an alternative credit scoring engine based on business activity and financial indicators.
+
+The scoring system uses structured financial information rather than relying only on traditional credit records.
+
+The scoring logic is kept in the backend and is independent of the frontend.
+
+## WhatsApp Integration
+
+WhatsApp is intended to provide a simple way for SMEs to record business activity.
+
+The intended flow is:
+
+1. A merchant sends business activity through WhatsApp.
+2. Twilio forwards the message to the FastAPI webhook.
+3. The backend processes and validates the input.
+4. The transaction is stored in PostgreSQL.
+5. Business intelligence and scoring can use the resulting transaction.
+
+A WhatsApp number is associated with a `data_sources` record and linked to a store. It is not treated as the merchant's identity.
+
+## Authentication
+
+The backend currently contains legacy token-based authentication.
+
+Neon Auth is planned as the long-term authentication solution.
+
+Authentication and authorization are separate concerns. Authentication identifies the user, while authorization determines which merchant and stores that user can access.
+
+The `merchant_users` table provides the relationship between users and merchants.
+
+## Frontend
+
+The frontend is built with Next.js, React, and Tailwind CSS.
+
+The dashboard currently displays:
+
+- Revenue
+- Business overview
+- Recent transactions
+- Top offerings
+- Payment methods
+- Credit score
+
+The frontend communicates with FastAPI and does not connect directly to PostgreSQL.
+
+Loading, empty, and API error states are handled by the dashboard.
+
+## Testing
+
+The backend uses pytest for automated testing.
+
+Current test areas include:
+
+- API routes
+- Business intelligence
+- Financial indicators
+- Insights
+- Validation
+- Visualization
+
+GitHub Actions runs automated backend tests when changes are pushed through the repository workflow.
+
+## Repository Structure
 
 ```text
-┌─────────────────────────────────────────────────────┐
-│ 4. INTERFACE — FastAPI                              │
-│                                                     │
-│ Exposes validated business data, financial         │
-│ metrics, insights, and scoring functionality.       │
-├─────────────────────────────────────────────────────┤
-│ 3. BI ENGINE — Python                               │
-│                                                     │
-│ Consumes validated business data and produces       │
-│ financial metrics, insights, snapshots, and         │
-│ deterministic scoring outputs.                      │
-├─────────────────────────────────────────────────────┤
-│ 2. VALIDATION — Pydantic                            │
-│                                                     │
-│ Defines valid data structures and enforces          │
-│ application-level business rules before data       │
-│ reaches the database or analytics layer.            │
-├─────────────────────────────────────────────────────┤
-│ 1. DATABASE — PostgreSQL                            │
-│                                                     │
-│ Schema-first storage for merchants, transactions,   │
-│ data sources, and financial snapshots.              │
-└─────────────────────────────────────────────────────┘
+zakascore/
+├── backend/
+│   ├── api/
+│   ├── bi/
+│   ├── config/
+│   ├── database/
+│   ├── docs/
+│   ├── scripts/
+│   ├── services/
+│   ├── tests/
+│   ├── validation/
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── app/
+│   ├── components/
+│   └── package.json
+│
+├── .github/
+│   └── workflows/
+│
+└── README.md
 ```
 
-### Design principle
+## Security Principles
 
-Each layer should have a clearly defined responsibility.
+- Database credentials remain server-side.
+- Secrets must not be committed to Git.
+- The frontend must not connect directly to PostgreSQL.
+- Business authorization is handled by the backend.
+- Destructive operations such as permanent data deletion should require explicit backend-controlled workflows.
 
-- The **database** provides persistence and structural integrity.
-- **Pydantic** provides application-level validation.
-- The **BI engine** performs calculations and generates financial intelligence.
-- The **API** exposes functionality without embedding business calculations directly into endpoint handlers.
+## Architecture Direction
 
-The architecture should allow individual implementation details to evolve without requiring a complete rewrite of the system.
+The system is designed so additional data sources can be added without changing the core merchant, store, and transaction model.
 
-For example:
+The current development path is:
 
-- PostgreSQL access is centralized through `database.connection`.
-- Synthetic/manual data may eventually be supplemented by external integrations.
-- New interfaces may consume the same BI engine without duplicating its logic.
-
----
-
-## 3. Components & Requirements
-
-### 3.1 Database Layer
-
-**Purpose:** Persist merchant, transaction, data-source, and financial-snapshot records in a structured schema.
-
-| ID   | Requirement                                                                                                                               | Priority | Status      |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------- |
-| DB-1 | System shall store merchant records with a unique identifier, business name, optional location, and creation timestamp.                   | Must     | Implemented |
-| DB-2 | System shall store transaction records associated with a merchant.                                                                        | Must     | Implemented |
-| DB-3 | Transactions shall record input type, transaction amount, payment method, source, and timestamp.                                          | Must     | Implemented |
-| DB-4 | System shall maintain a catalog of data sources with a defined source taxonomy.                                                           | Must     | Implemented |
-| DB-5 | Transactions shall be traceable to their originating data source through a foreign key relationship.                                      | Must     | Implemented |
-| DB-6 | Foreign key constraints shall enforce relationships between merchants, transactions, financial snapshots, and data sources where defined. | Must     | Implemented |
-| DB-7 | System shall store periodized financial snapshots associated with merchants.                                                              | Must     | Implemented |
-| DB-8 | Financial snapshot values shall enforce non-negative financial constraints and valid reporting periods.                                   | Must     | Implemented |
-| DB-9 | The PostgreSQL schema is initialized centrally and database constraints are enforced.                                                      | Should   | Done        |
-
-**Definition of Done:** The database schema is created through the initialization scripts, relationships and constraints are enforced, and automated tests verify database functionality.
-
-WhatsApp sender lookup uses `data_sources.external_identifier` for rows whose
-`source_type` is `whatsapp`, then follows the source's `store_id` to its merchant.
-Webhook registration creates a merchant, its initial store, and the associated
-WhatsApp data source without adding phone fields or tables outside this schema.
-
----
-
-### 3.2 Validation Layer — Pydantic
-
-**Purpose:** Ensure application data conforms to the defined schema and business rules before being processed further.
-
-| ID    | Requirement                                                                                        | Priority | Status      |
-| ----- | -------------------------------------------------------------------------------------------------- | -------- | ----------- |
-| VAL-1 | System shall define Pydantic models for merchant data.                                             | Must     | Implemented |
-| VAL-2 | System shall define Pydantic models for transaction data.                                          | Must     | Implemented |
-| VAL-3 | System shall define Pydantic models for data-source records.                                       | Must     | Implemented |
-| VAL-4 | System shall define Pydantic models for financial snapshots.                                       | Must     | Implemented |
-| VAL-5 | Constrained fields shall reject invalid values such as unsupported payment methods or input types. | Must     | Implemented |
-| VAL-6 | Financial values requiring non-negative constraints shall reject invalid negative values.          | Must     | Implemented |
-| VAL-7 | Validation rules shall be covered by automated tests.                                              | Must     | Implemented |
-
-The validation layer acts as the application-level contract between incoming data and the rest of the system.
-
-**Definition of Done:** Core Pydantic models are implemented, validation rules are enforced, and automated tests cover valid and invalid inputs.
-
----
-
-### 3.3 Automated Testing
-
-**Purpose:** Protect the database and validation foundation as ZakaScore evolves.
-
-| ID     | Requirement                                                                                            | Priority | Status      |
-| ------ | ------------------------------------------------------------------------------------------------------ | -------- | ----------- |
-| TEST-1 | Database functionality shall be covered by automated tests.                                            | Must     | Implemented |
-| TEST-2 | Valid Pydantic models shall be accepted.                                                               | Must     | Implemented |
-| TEST-3 | Invalid values shall be rejected according to defined validation rules.                                | Must     | Implemented |
-| TEST-4 | Parameterized tests shall be used where the same validation rule applies to multiple fields or values. | Should   | Implemented |
-| TEST-5 | The complete automated test suite shall pass before major development layers are introduced.           | Must     | Implemented |
-
-**Current baseline:**
-
-The test suite runs against PostgreSQL and covers database-backed webhook, BI,
-and scoring routes.
-
-**Current baseline:** 111 tests pass against PostgreSQL 16.
-
-The testing foundation will continue to expand as the BI engine and API layers are implemented.
-
----
-
-### 3.4 BI Engine — Python
-
-**Purpose:** Transform validated business data into useful financial metrics, insights, and scoring outputs.
-
-| ID    | Requirement                                                                                                        | Priority | Status  |
-| ----- | ------------------------------------------------------------------------------------------------------------------ | -------- | ------- |
-| BI-1  | Engine shall aggregate transaction data into financial metrics for a merchant and defined reporting period.        | Must     | Pending |
-| BI-2  | Engine shall calculate revenue and transaction-volume metrics.                                                     | Must     | Pending |
-| BI-3  | Engine shall calculate performance and consistency metrics.                                                        | Must     | Pending |
-| BI-4  | Engine shall calculate revenue growth between comparable reporting periods.                                        | Must     | Pending |
-| BI-5  | Engine shall calculate an explainable measure of financial volatility.                                             | Must     | Pending |
-| BI-6  | Engine shall generate business insights from calculated metrics.                                                   | Must     | Pending |
-| BI-7  | Engine shall combine defined metrics into a deterministic and explainable score.                                   | Must     | Pending |
-| BI-8  | Engine shall return an insufficient-data state when available history does not meet the defined minimum threshold. | Must     | Pending |
-| BI-9  | BI calculations shall be implemented independently from FastAPI endpoint logic.                                    | Must     | Pending |
-| BI-10 | BI logic shall be covered by automated tests using representative business scenarios.                              | Must     | Pending |
-
-The BI engine is not intended to produce a score alone. Metrics and insights are first-class outputs of the system.
-
-**Definition of Done:** The BI engine has documented calculations, produces meaningful metrics and insights, implements an explainable scoring methodology, and passes automated tests across representative business scenarios.
-
----
-
-### 3.5 Interface Layer — FastAPI
-
-**Purpose:** Provide a future programmatic interface to ZakaScore functionality.
-
-The existing FastAPI API exposes the WhatsApp webhook and merchant BI/scoring
-routes. Those data routes remain backed by the existing bearer-token contract.
-
-| ID    | Requirement                                                                                   | Priority | Status  |
-| ----- | --------------------------------------------------------------------------------------------- | -------- | ------- |
-| API-1 | System shall expose an endpoint for creating merchants.                                       | Must     | Pending |
-| API-2 | System shall expose an endpoint for recording transactions.                                   | Must     | Pending |
-| API-3 | System shall expose an endpoint for retrieving merchant transactions.                         | Must     | Pending |
-| API-4 | System shall expose an endpoint for retrieving financial snapshots.                           | Must     | Pending |
-| API-5 | System shall expose an endpoint for retrieving business metrics and insights.                 | Must     | Pending |
-| API-6 | System shall expose an endpoint for retrieving the current ZakaScore.                         | Must     | Pending |
-| API-7 | API endpoints shall use Pydantic request and response models.                                 | Must     | Pending |
-| API-8 | Endpoints shall be documented and testable through FastAPI's automatically generated `/docs`. | Must     | Pending |
-| API-9 | Endpoints shall return appropriate HTTP status codes for successful and failed operations.    | Must     | Pending |
-
----
-
-## 4. Data Strategy
-
-ZakaScore is designed to be **source-agnostic**.
-
-The database currently supports the concept of multiple data sources, allowing transactions to be associated with their originating source.
-
-Potential future sources may include:
-
-- POS systems
-- bank data
-- manual entry
-- online stores
-- WhatsApp-based transaction capture
-- other payment or business systems
-
-V1.0.0 does not require live integrations with these external systems.
-
-The objective at this stage is to establish a data model capable of supporting them later without requiring a fundamental redesign.
-
----
-
-## 5. Non-Functional Requirements
-
-| Category       | Requirement                                                                                                             |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Data integrity | Foreign key constraints shall be enforced at the database level.                                                        |
-| Validation     | Application-level validation shall be performed using Pydantic.                                                         |
-| Testability    | Database, validation, and BI logic shall be independently testable.                                                     |
-| Explainability | Scoring calculations shall be deterministic and explainable in V1.0.0.                                                  |
-| Security       | No plaintext passwords, API keys, or other secrets shall be stored in source code.                                      |
-| Portability    | Application database access uses psycopg-compatible PostgreSQL queries and a centralized connection layer.             |
-| Performance    | BI calculations should remain practical for small-business transaction datasets.                                        |
-| Documentation  | System documentation shall remain synchronized with the as-built architecture and implementation.                       |
-
----
-
-## 6. Explicit Exclusions — V1.0.0
-
-To maintain a realistic scope, V1.0.0 excludes:
-
-- Live bank integrations
-- Live payment-provider integrations
-- Yoco integration
-- PayFast integration
-- Ozow integration
-- Stitch/Mono integration
-- Machine-learning credit scoring
-- A production frontend
-- Full authentication and session management
-- Lender-facing dashboards
-- Automated lending decisions
-- OTP request and verification routes (deferred until authentication is configured)
-
-These capabilities may be considered in future versions.
-
----
-
-## 7. Open Engineering Decisions
-
-### 7.1 Score scale
-
-The final score scale must be defined before the scoring formula is finalized.
-
-Potential approaches include a simple 0–100 scale or a more traditional credit-score-style range.
-
-### 7.2 Minimum data threshold
-
-The minimum transaction history required before ZakaScore can produce a meaningful score must be defined.
-
-The threshold may consider:
-
-- number of transactions
-- number of reporting periods
-- number of days of history
-
-### 7.3 Scoring methodology
-
-The relative contribution of different metrics such as volume, consistency, growth, and recency must be documented before the scoring engine is finalized.
-
-The formula should remain deterministic and explainable in V1.0.0.
-
-### 7.4 Synthetic/test data
-
-Representative business scenarios should be established for BI testing, such as:
-
-- steady business
-- growing business
-- declining business
-- seasonal business
-- sparse/new business
-
-These scenarios will help ensure that scoring and insight generation behave sensibly across different operating patterns.
-
-### 7.5 Snapshot generation
-
-A decision is required on whether financial snapshots are generated:
-
-- on demand,
-- on a schedule,
-- or through a combination of both.
-
----
-
-## 8. Definition of Done — V1.0.0
-
-V1.0.0 will be considered complete when:
-
-- [x] Database schema is implemented and constraint-tested
-- [x] Core Pydantic validation models are implemented
-- [x] Automated database and validation tests are passing
-- [ ] BI engine calculates required financial metrics
-- [ ] BI engine generates business insights
-- [ ] Deterministic scoring methodology is documented and implemented
-- [ ] BI engine is covered by automated tests
-- [ ] FastAPI interface is implemented
-- [ ] API endpoints are documented through `/docs`
-- [ ] API request and response models use Pydantic
-- [ ] No hardcoded secrets or credentials exist in the repository
-- [ ] System requirements documentation reflects the actual as-built architecture
-
----
-
-## 9. Current Development Position
-
-The foundational layers of ZakaScore are now complete:
-
-```text
-Database
-   ↓
-Pydantic Validation
-   ↓
-Automated Testing
-   ↓
-BI Engine       ← NEXT
-   ↓
-FastAPI
-```
-
-The next major development stage is therefore the **ZakaScore BI Engine**, where validated transaction and financial data will be transformed into metrics, insights, and eventually the ZakaScore itself.
+1. PostgreSQL migration
+2. Frontend and API integration
+3. WhatsApp integration
+4. End-to-end testing
+5. Authentication integration
+6. Production deployment
