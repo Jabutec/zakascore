@@ -72,6 +72,24 @@ def init_database(connection=None):
             """)
 
             cursor.execute("""
+                CREATE TABLE IF NOT EXISTS connect_codes (
+                    code TEXT PRIMARY KEY,
+                    store_id TEXT NOT NULL,
+                    merchant_id TEXT,
+                    used BOOLEAN NOT NULL DEFAULT FALSE,
+                    expires_at TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (store_id)
+                        REFERENCES stores(store_id)
+                        ON DELETE CASCADE,
+                    FOREIGN KEY (merchant_id)
+                        REFERENCES merchants(merchant_id)
+                        ON DELETE CASCADE,
+                    CHECK (expires_at > created_at)
+                );
+            """)
+
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS offerings (
                     offering_id TEXT PRIMARY KEY,
                     store_id TEXT NOT NULL,
@@ -155,6 +173,14 @@ def init_database(connection=None):
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_sources_store "
                 "ON data_sources(store_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_connect_codes_store "
+                "ON connect_codes(store_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_connect_codes_expires "
+                "ON connect_codes(expires_at);"
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_transactions_store "

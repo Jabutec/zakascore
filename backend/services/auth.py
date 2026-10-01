@@ -11,18 +11,27 @@ JWT_SECRET = os.environ.get("JWT_SECRET")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24
 
-def create_access_token(merchant_id: str) -> str:
+
+def create_access_token(user_id: str, merchant_id: str | None = None) -> str:
+    if not JWT_SECRET:
+        raise RuntimeError("JWT_SECRET is not configured")
+
     payload = {
-        "merchant_id": merchant_id,
-        "exp": datetime.now() + timedelta(hours=JWT_EXPIRY_HOURS)
+        "user_id": user_id,
+        "exp": datetime.now() + timedelta(hours=JWT_EXPIRY_HOURS),
     }
+    if merchant_id is not None:
+        payload["merchant_id"] = merchant_id
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
 def verify_access_token(token: str) -> str | None:
+    if not JWT_SECRET:
+        return None
+
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        return payload["merchant_id"]
+        return payload.get("user_id") or payload.get("merchant_id") or payload.get("sub")
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError:
