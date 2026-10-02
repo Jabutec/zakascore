@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Header, HTTPException, Depends
 from services.auth import verify_access_token
+from services.authorization import get_user_merchants
 from bi.visualization import prepare_revenue_data, prepare_top_offerings_data
 from bi.overview import get_business_overview
 from bi.visualization import prepare_payment_method_data
@@ -18,12 +19,27 @@ def get_current_merchant_id(authorization: str = Header(...)) -> str:
         raise HTTPException(status_code=401, detail="Invalid authorization header")
 
     token = authorization.replace("Bearer ", "")
-    merchant_id = verify_access_token(token)
+    user_id = verify_access_token(token)
 
-    if merchant_id is None:
+    if user_id is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    return merchant_id
+    conn = get_db()
+    try:
+        merchants = get_user_merchants(user_id, conn)
+        if merchants:
+            return merchants[0]["merchant_id"]
+
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT merchant_id FROM merchants WHERE merchant_id = %s", (user_id,))
+            row = cursor.fetchone()
+
+        if row is not None:
+            return row[0]
+
+        raise HTTPException(status_code=403, detail="User does not belong to any merchant")
+    finally:
+        conn.close()
 
 
 @router.get("/api/transactions")
