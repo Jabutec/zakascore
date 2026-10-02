@@ -11,7 +11,7 @@ from services.onboarding import get_merchant_by_number, create_merchant, generat
 from services.parser import extract_transaction_details
 from services.offerings import get_or_create_offering
 from services.transcription import transcribe_audio
-from config.tiers import has_reached_limit
+from services.tiers import has_reached_limit
 from validation.models import Transaction, InputType
 
 load_dotenv()
