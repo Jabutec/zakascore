@@ -14,3 +14,4 @@ uvicorn
 word2number
 psycopg[binary]
 psycopg-pool
+psycopg[binary,pool]>=3.2
