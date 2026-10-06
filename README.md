@@ -24,7 +24,7 @@ Designed to collect and normalize business activity from different sources, incl
 - Online stores
 - Banking and payment data
 - CSV and structured financial data
-- WhatsApp-based business records
+- Dashboard/PWA sale logging
 
 ### Financial Intelligence
 
@@ -78,7 +78,7 @@ A web dashboard provides a visual interface for exploring financial performance,
 - [x] Financial metrics
 - [x] Business intelligence
 - [x] Alternative scoring
-- [x] Webhook infrastructure
+- [x] Authenticated transaction API
 - [x] LLM-powered data parsing
 - [x] Web dashboard
 - [x] Automated testing
@@ -89,7 +89,7 @@ A web dashboard provides a visual interface for exploring financial performance,
 - [ ] Additional data integrations
 - [ ] Banking and payment integrations
 - [ ] Online business integrations
-- [ ] WhatsApp data ingestion
+- [x] Authenticated PWA transaction logging
 - [ ] Production deployment
 - [x] Production database
 - [ ] Data quality improvements

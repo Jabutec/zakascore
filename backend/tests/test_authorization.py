@@ -167,8 +167,7 @@ def test_get_user_merchants_lists_oldest_first(conn):
     assert [m["role"] for m in merchants] == ["owner", "admin"]
 
 
-def test_unclaimed_merchants_have_no_users(conn):
-    # a WhatsApp-first merchant nobody has claimed yet: nobody has access
+def test_merchants_without_users_have_no_access(conn):
     merchant_id, _ = make_merchant(conn, "TEST Unclaimed", {})
     with pytest.raises(PermissionError):
         authz.require_merchant_access(str(uuid4()), str(merchant_id), conn)

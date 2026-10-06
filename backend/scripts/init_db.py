@@ -5,7 +5,7 @@ from database.connection import get_direct_connection
 # - merchant_users.user_id is the Neon Auth user id (the JWT `sub`), i.e. neon_auth."user".id.
 #   No FK is declared so this file doesn't depend on the neon_auth schema existing.
 # - CREATE ... IF NOT EXISTS is safe to re-run but cannot ALTER existing tables.
-#   Drop the old tables first when moving from the TEXT-ID schema.
+#   Drop and recreate the database when changing this schema.
 
 SCHEMA_STATEMENTS = [
     # ---------------------------------------------------------------- merchants
@@ -20,7 +20,7 @@ SCHEMA_STATEMENTS = [
     );
     """,
     # ---------------------------------------------------------- merchant_users
-    # A merchant can exist with no users (WhatsApp-first, not yet claimed).
+    # Every merchant is associated with at least one user at onboarding.
     """
     CREATE TABLE IF NOT EXISTS merchant_users (
         user_id     UUID NOT NULL,
@@ -47,7 +47,6 @@ SCHEMA_STATEMENTS = [
     # ------------------------------------------------------------ data_sources
     # UNIQUE (source_id, store_id) lets transactions use a composite FK so a
     # transaction can never pair store A with a source belonging to store B.
-    # For WhatsApp, external_identifier is the sender's number in E.164 (+27...).
     """
     CREATE TABLE IF NOT EXISTS data_sources (
         source_id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -57,45 +56,12 @@ SCHEMA_STATEMENTS = [
         source_type         TEXT NOT NULL
                             CHECK (source_type IN (
                                 'pos', 'bank_statement', 'accounting_software',
-                                'online_store', 'whatsapp', 'csv', 'manual'
+                                'online_store', 'pwa', 'csv', 'manual'
                             )),
         external_identifier TEXT,
         is_active           BOOLEAN NOT NULL DEFAULT TRUE,
         created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-        UNIQUE (source_id, store_id),
-        CHECK (
-            source_type <> 'whatsapp'
-            OR external_identifier ~ '^\\+[1-9][0-9]{7,14}$'
-        )
-    );
-    """,
-    # One active WhatsApp number can belong to only one store. Also serves the webhook lookup.
-    """
-    CREATE UNIQUE INDEX IF NOT EXISTS uniq_whatsapp_number
-        ON data_sources (external_identifier)
-        WHERE source_type = 'whatsapp' AND is_active;
-    """,
-    # ----------------------------------------------------------- connect_codes
-    # purpose = 'link_whatsapp' : dashboard-first, user texts the code to the bot
-    # purpose = 'claim_merchant': WhatsApp-first, user enters the code on the dashboard
-    # The merchant is derived from the store, so the two can never disagree.
-    # Consume atomically:
-    #   UPDATE connect_codes SET used_at = now()
-    #   WHERE code = %s AND purpose = %s AND used_at IS NULL AND expires_at > now()
-    #   RETURNING store_id;
-    """
-    CREATE TABLE IF NOT EXISTS connect_codes (
-        code            TEXT PRIMARY KEY,
-        purpose         TEXT NOT NULL
-                        CHECK (purpose IN ('link_whatsapp', 'claim_merchant')),
-        store_id        UUID NOT NULL
-                        REFERENCES stores(store_id) ON DELETE CASCADE,
-        expires_at      TIMESTAMPTZ NOT NULL,
-        used_at         TIMESTAMPTZ,
-        used_by_user_id UUID,
-        created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-        CHECK (expires_at > created_at),
-        CHECK (used_at IS NULL OR used_by_user_id IS NOT NULL)
+        UNIQUE (source_id, store_id)
     );
     """,
     # --------------------------------------------------------------- offerings
@@ -120,16 +86,15 @@ SCHEMA_STATEMENTS = [
         transaction_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         store_id            UUID NOT NULL,
         source_id           UUID NOT NULL,
+        client_txn_id       UUID NOT NULL,
         offering_id         UUID REFERENCES offerings(offering_id) ON DELETE RESTRICT,
         quantity            INTEGER CHECK (quantity IS NULL OR quantity > 0),
         input_type          TEXT NOT NULL
                             CHECK (input_type IN (
-                                'pos_tap', 'voice', 'manual', 'whatsapp', 'csv', 'api'
+                                'pos_tap', 'voice', 'manual', 'pwa', 'csv', 'api'
                             )),
         amount_zar          NUMERIC(12, 2) NOT NULL CHECK (amount_zar > 0),
-        payment_method      TEXT CHECK (payment_method IN ('cash', 'digital')),
-        raw_message         TEXT,
-        whatsapp_message_id TEXT UNIQUE,
+        payment_method      TEXT NOT NULL CHECK (payment_method IN ('cash', 'digital')),
         is_voided           BOOLEAN NOT NULL DEFAULT FALSE,
         voided_at           TIMESTAMPTZ,
         void_reason         TEXT,
@@ -139,7 +104,9 @@ SCHEMA_STATEMENTS = [
             REFERENCES stores(store_id) ON DELETE CASCADE,
         FOREIGN KEY (source_id, store_id)
             REFERENCES data_sources(source_id, store_id) ON DELETE RESTRICT,
-        CHECK (is_voided = (voided_at IS NOT NULL))
+        CHECK (is_voided = (voided_at IS NOT NULL)),
+        CHECK (quantity IS NULL OR offering_id IS NOT NULL),
+        UNIQUE (store_id, client_txn_id)
     );
     """,
     # ------------------------------------------------------ financial_snapshots
@@ -170,8 +137,6 @@ SCHEMA_STATEMENTS = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_stores_merchant ON stores (merchant_id);",
     "CREATE INDEX IF NOT EXISTS idx_sources_store ON data_sources (store_id);",
-    "CREATE INDEX IF NOT EXISTS idx_connect_codes_store ON connect_codes (store_id);",
-    "CREATE INDEX IF NOT EXISTS idx_connect_codes_expires ON connect_codes (expires_at);",
     # Dashboard queries: per store, by date, excluding voided rows.
     """
     CREATE INDEX IF NOT EXISTS idx_transactions_store_date_live

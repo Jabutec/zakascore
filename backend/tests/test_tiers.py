@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -127,11 +128,13 @@ def seed(conn, today=3, voided=1, old=2):
 
     def add(when_sql, is_voided=False):
         conn.execute(
-            f"""INSERT INTO transactions (store_id, source_id, input_type, amount_zar,
-                    payment_method, transaction_date, is_voided, voided_at)
-                VALUES (%s, %s, 'manual', 100, 'cash', {when_sql}, %s,
+            f"""INSERT INTO transactions (
+                    store_id, source_id, client_txn_id, input_type, amount_zar,
+                    payment_method, transaction_date, is_voided, voided_at
+                )
+                VALUES (%s, %s, %s, 'manual', 100, 'cash', {when_sql}, %s,
                         CASE WHEN %s THEN now() END)""",
-            (store_id, source_id, is_voided, is_voided),
+            (store_id, source_id, uuid4(), is_voided, is_voided),
         )
 
     for _ in range(today):
