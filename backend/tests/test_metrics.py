@@ -100,10 +100,17 @@ def test_revenue_growth_from_zero():
     assert result is None
     
 def test_revenue_volatility():
-    transactions = create_transactions()
+    transactions = [
+        make_transaction(
+            100 * (day + 1),
+            datetime(2026, 8, day + 1, 10, 0),
+        )
+        for day in range(7)
+    ]
 
     result = calculate_revenue_volatility(transactions)
 
+    assert result is not None
     assert result > 0
 
 def test_revenue_volatility_for_constant_revenue():
@@ -112,14 +119,14 @@ def test_revenue_volatility_for_constant_revenue():
         make_transaction(100, datetime(2026, 8, 2, 10, 0)),
     ]
 
-    assert calculate_revenue_volatility(transactions) == 0.0
+    assert calculate_revenue_volatility(transactions) is None
     
 def test_revenue_volatility_insufficient_data():
     transactions = [
         make_transaction(100, datetime(2026, 8, 1, 10, 0))
     ]
 
-    assert calculate_revenue_volatility(transactions) == 0.0
+    assert calculate_revenue_volatility(transactions) is None
     
 def test_recency():
     transactions = create_transactions()
