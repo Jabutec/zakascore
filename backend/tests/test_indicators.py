@@ -1,5 +1,6 @@
 import pytest
 from bi.indicators import (
+    MIN_PAYMENT_COVERAGE,
     calculate_transaction_activity,
     determine_activity_status,
     determine_digital_payment_adoption,
@@ -85,3 +86,37 @@ def test_determine_activity_status(days_since_transaction, expected):
 )
 def test_determine_digital_payment_adoption(cash_revenue, digital_revenue, expected):
     assert determine_digital_payment_adoption(cash_revenue, digital_revenue) == expected
+
+
+@pytest.mark.parametrize(
+    "cash_revenue, digital_revenue, total_revenue, expected",
+    [
+        # Full coverage: judged normally
+        (20, 80, 100, "high"),
+        (90, 10, 100, "low"),
+        # Partial coverage above the threshold: still judged on known revenue only
+        (30, 70, 150, "high"),
+        # Exactly at the coverage threshold: judged (check is strictly "<")
+        (20, 80, 200, "high"),
+        # Just below the threshold: insufficient
+        (20, 79, 200, "insufficient_data"),
+        # Mostly unknown payment methods (e.g. WhatsApp sales): insufficient
+        (10, 10, 1000, "insufficient_data"),
+        # No known revenue at all
+        (0, 0, 100, "insufficient_data"),
+        # total_revenue None or 0 skips the coverage check
+        (50, 50, None, "moderate"),
+        (50, 50, 0, "moderate"),
+    ],
+)
+def test_determine_digital_payment_adoption_with_coverage(
+    cash_revenue, digital_revenue, total_revenue, expected
+):
+    result = determine_digital_payment_adoption(
+        cash_revenue, digital_revenue, total_revenue
+    )
+    assert result == expected
+
+
+def test_min_payment_coverage_threshold():
+    assert MIN_PAYMENT_COVERAGE == 0.5
