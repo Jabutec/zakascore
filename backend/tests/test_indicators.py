@@ -100,7 +100,7 @@ def test_determine_digital_payment_adoption(cash_revenue, digital_revenue, expec
         (20, 80, 200, "high"),
         # Just below the threshold: insufficient
         (20, 79, 200, "insufficient_data"),
-        # Mostly unknown payment methods (e.g. WhatsApp sales): insufficient
+        # Mostly legacy sales with no recorded payment method: insufficient
         (10, 10, 1000, "insufficient_data"),
         # No known revenue at all
         (0, 0, 100, "insufficient_data"),

@@ -17,8 +17,7 @@ SAST = ZoneInfo("Africa/Johannesburg")
 
 TRIAL_DAYS = 30
 
-# Anti-abuse ceilings, not a business limit: every logged message can cost an LLM call.
-# Placeholders; a real merchant should never see this.
+# Anti-abuse ceilings, not business limits. A normal merchant should never reach them.
 DAILY_LOGGING_CEILING = {Tier.INSIGHTS: 200, Tier.FULL: 1000}
 
 

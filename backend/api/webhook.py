@@ -1,17 +1,23 @@
-from fastapi import FastAPI, Form
-from fastapi.responses import PlainTextResponse
-from datetime import datetime
-from api.auth import router as auth_router
-from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
+"""FastAPI application and authenticated PWA transaction logging endpoint."""
 import os
-from database.connection import get_db as get_connection
+from decimal import Decimal
+from uuid import UUID
 
-from services.onboarding import get_merchant_by_number, create_merchant, generate_next_transaction_id
-from services.parser import extract_transaction_details
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import AwareDatetime, ValidationError
+
+from api.auth import get_conn, get_current_user_id, router as auth_router
+from services.authorization import require_store_access
+from services.onboarding import get_pwa_source_id
 from services.offerings import get_or_create_offering
 from services.tiers import has_reached_limit
-from validation.models import Transaction, InputType
+from validation.models import (
+    PaymentMethod,
+    StrictModel,
+    TransactionCreate,
+)
 
 load_dotenv()
 
@@ -28,90 +34,150 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN")
+
+class PwaTransactionRequest(StrictModel):
+    store_id: UUID
+    client_txn_id: UUID
+    amount_zar: Decimal
+    payment_method: PaymentMethod
+    offering_name: str | None = None
+    quantity: int | None = None
+    transaction_date: AwareDatetime | None = None
 
 
-def get_db():
-    return get_connection()
+TRANSACTION_COLUMNS = (
+    "transaction_id, client_txn_id, store_id, source_id, input_type, amount_zar, "
+    "payment_method, offering_id, quantity, transaction_date, is_voided, "
+    "voided_at, void_reason, created_at"
+)
 
 
-@app.post("/webhook")
-async def whatsapp_webhook(
-    From: str = Form(...),
-    Body: str = Form(""),
-    NumMedia: str = Form("0"),
-    MediaUrl0: str = Form(None)
+def _transaction_response(row) -> dict:
+    return {
+        "transaction_id": str(row[0]),
+        "client_txn_id": str(row[1]),
+        "store_id": str(row[2]),
+        "source_id": str(row[3]),
+        "input_type": row[4],
+        "amount_zar": round(float(row[5]), 2),
+        "payment_method": row[6],
+        "offering_id": str(row[7]) if row[7] is not None else None,
+        "quantity": row[8],
+        "transaction_date": row[9].isoformat(),
+        "is_voided": row[10],
+        "voided_at": row[11].isoformat() if row[11] is not None else None,
+        "void_reason": row[12],
+        "created_at": row[13].isoformat() if row[13] is not None else None,
+    }
+
+
+def _select_transaction(conn, store_id: UUID, client_txn_id: UUID):
+    return conn.execute(
+        f"""SELECT {TRANSACTION_COLUMNS}
+            FROM transactions
+            WHERE store_id = %s AND client_txn_id = %s""",
+        (store_id, client_txn_id),
+    ).fetchone()
+
+
+def _validate_transaction(
+    request: PwaTransactionRequest, source_id: UUID, offering_id: UUID | None
+) -> TransactionCreate:
+    transaction_data = {
+        "store_id": request.store_id,
+        "source_id": source_id,
+        "client_txn_id": request.client_txn_id,
+        "offering_id": offering_id,
+        "quantity": request.quantity,
+        "input_type": "pwa",
+        "amount_zar": request.amount_zar,
+        "payment_method": request.payment_method,
+    }
+    if request.transaction_date is not None:
+        transaction_data["transaction_date"] = request.transaction_date
+    return TransactionCreate(**transaction_data)
+
+
+@app.post("/transactions")
+def create_transaction(
+    request: PwaTransactionRequest,
+    user_id: str = Depends(get_current_user_id),
+    conn=Depends(get_conn),
 ):
-    whatsapp_number = From.replace("whatsapp:", "")
-    conn = get_db()
+    try:
+        store_access = require_store_access(
+            user_id, request.store_id, conn, min_role="employee"
+        )
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error))
 
-    merchant = get_merchant_by_number(whatsapp_number, conn)
+    existing = _select_transaction(conn, request.store_id, request.client_txn_id)
+    if existing is not None:
+        try:
+            _validate_transaction(request, existing[3], existing[7])
+        except ValidationError as error:
+            raise HTTPException(status_code=422, detail=str(error))
+        return _transaction_response(existing)
 
-    if merchant is None:
-        if Body.lower().startswith("register:"):
-            business_name = Body.split(":", 1)[1].strip()
-            create_merchant(whatsapp_number, business_name, conn)
-            reply = "Registered! Now send your sale amounts anytime, e.g. 300"
-        else:
-            reply = "Welcome to ZakaScore. To get started, send: register: Your Business Name"
-        conn.close()
-        return PlainTextResponse(reply)
+    try:
+        source_id = get_pwa_source_id(request.store_id, conn)
+    except LookupError as error:
+        raise HTTPException(status_code=500, detail=str(error))
 
-    if has_reached_limit(merchant.merchant_id, merchant.tier, merchant.created_at, conn):
-        conn.close()
-        return PlainTextResponse("Transaction not recorded — you've reached your daily limit.")
+    offering_id = None
+    if request.offering_name is not None:
+        try:
+            offering_id = get_or_create_offering(
+                request.store_id, request.offering_name, conn
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error))
 
-    if int(NumMedia) > 0 and MediaUrl0:
-        text = transcribe_audio(MediaUrl0, (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN))
-        if text is None:
-            conn.close()
-            return PlainTextResponse("We couldn't process that voice note. Please try again.")
-    else:
-        text = Body
+    try:
+        transaction = _validate_transaction(request, source_id, offering_id)
+    except ValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error))
 
-    details = extract_transaction_details(text)
-
-    if details is None:
-        conn.close()
-        return PlainTextResponse(
-            "We couldn't log that — please tell us what you sold and for how much, "
-            "e.g. 'sold 2 shirts for 300'"
+    merchant = conn.execute(
+        "SELECT tier, created_at FROM merchants WHERE merchant_id = %s",
+        (store_access["merchant_id"],),
+    ).fetchone()
+    if has_reached_limit(
+        store_access["merchant_id"], merchant[0], merchant[1], conn
+    ):
+        existing = _select_transaction(
+            conn, request.store_id, request.client_txn_id
+        )
+        if existing is not None:
+            return _transaction_response(existing)
+        raise HTTPException(
+            status_code=429,
+            detail="Transaction not recorded — you've reached your daily limit.",
         )
 
-    offering_id = get_or_create_offering(merchant.store_id, details["item"], conn)
-    amount = details["amount"]
-    quantity = details["quantity"]
-
-    transaction = Transaction(
-        transaction_id=generate_next_transaction_id(conn),
-        merchant_id=merchant.merchant_id,
-        source_id=merchant.source_id,
-        input_type=InputType.WHATSAPP,
-        amount_zar=amount,
-        offering_id=offering_id,
-        quantity=quantity,
-        raw_message=text,
-        transaction_date=datetime.now(),
-    )
-
-    conn.execute(
-        """INSERT INTO transactions
-               (transaction_id, store_id, source_id, input_type, amount_zar,
-                offering_id, quantity, raw_message)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+    row = conn.execute(
+        f"""INSERT INTO transactions (
+                store_id, source_id, client_txn_id, input_type, amount_zar,
+                payment_method, offering_id, quantity, transaction_date
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (store_id, client_txn_id) DO NOTHING
+            RETURNING {TRANSACTION_COLUMNS}""",
         (
-            transaction.transaction_id,
-            merchant.store_id,
+            transaction.store_id,
             transaction.source_id,
+            transaction.client_txn_id,
             transaction.input_type.value,
             transaction.amount_zar,
+            transaction.payment_method.value,
             transaction.offering_id,
             transaction.quantity,
-            transaction.raw_message,
+            transaction.transaction_date,
         ),
-    )
-    conn.commit()
-    conn.close()
+    ).fetchone()
 
-    return PlainTextResponse(f"Logged: R{amount}")
+    if row is None:
+        row = _select_transaction(conn, request.store_id, request.client_txn_id)
+    if row is None:
+        raise RuntimeError("Transaction insert returned no row for its idempotency key")
+    return _transaction_response(row)

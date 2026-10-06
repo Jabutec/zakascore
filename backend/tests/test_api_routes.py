@@ -13,10 +13,10 @@ from zoneinfo import ZoneInfo
 
 import psycopg
 import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api import auth as api_auth
+from api.webhook import app
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -51,13 +51,15 @@ def client(monkeypatch):
         request_connection = psycopg.connect(TEST_DATABASE_URL)
         try:
             yield request_connection
-        finally:
+        except Exception:
             request_connection.rollback()
+            raise
+        else:
+            request_connection.commit()
+        finally:
             request_connection.close()
 
-    app = FastAPI()
-    app.include_router(api_auth.router)
-    app.dependency_overrides[api_auth.get_conn] = request_conn
+    monkeypatch.setitem(app.dependency_overrides, api_auth.get_conn, request_conn)
 
     test_client = TestClient(app)
     test_client.tokens = tokens
@@ -70,7 +72,9 @@ def login(client, user_id, name="token"):
     return {"Authorization": f"Bearer {token}"}
 
 
-def make_merchant(conn, name, owner=None, tier="insights", created_days_ago=0):
+def make_merchant(
+    conn, name, owner=None, tier="insights", created_days_ago=0, role="owner"
+):
     merchant_id = conn.execute(
         "INSERT INTO merchants (business_name, tier, created_at) "
         "VALUES (%s, %s, now() - make_interval(days => %s)) RETURNING merchant_id",
@@ -87,8 +91,8 @@ def make_merchant(conn, name, owner=None, tier="insights", created_days_ago=0):
     ).fetchone()[0]
     if owner is not None:
         conn.execute(
-            "INSERT INTO merchant_users (user_id, merchant_id, role) VALUES (%s, %s, 'owner')",
-            (owner, merchant_id),
+            "INSERT INTO merchant_users (user_id, merchant_id, role) VALUES (%s, %s, %s)",
+            (owner, merchant_id, role),
         )
     conn.commit()
     return merchant_id, store_id, source_id
@@ -97,12 +101,40 @@ def make_merchant(conn, name, owner=None, tier="insights", created_days_ago=0):
 def add_sale(conn, store_id, source_id, amount, when=None, payment="cash", voided=False,
              offering_id=None, quantity=None, input_type="manual"):
     conn.execute(
-        """INSERT INTO transactions (store_id, source_id, input_type, amount_zar, payment_method,
-                transaction_date, is_voided, voided_at, offering_id, quantity)
-           VALUES (%s, %s, %s, %s, %s, COALESCE(%s, now()), %s, CASE WHEN %s THEN now() END, %s, %s)""",
-        (store_id, source_id, input_type, amount, payment, when, voided, voided, offering_id, quantity),
+        """INSERT INTO transactions (
+                store_id, source_id, client_txn_id, input_type, amount_zar,
+                payment_method, transaction_date, is_voided, voided_at,
+                offering_id, quantity
+           )
+           VALUES (%s, %s, %s, %s, %s, %s, COALESCE(%s, now()), %s,
+                   CASE WHEN %s THEN now() END, %s, %s)""",
+        (
+            store_id, source_id, uuid4(), input_type, amount, payment, when,
+            voided, voided, offering_id, quantity,
+        ),
     )
     conn.commit()
+
+
+def add_pwa_source(conn, store_id):
+    source_id = conn.execute(
+        """INSERT INTO data_sources (store_id, source_name, source_type)
+           VALUES (%s, 'PWA', 'pwa') RETURNING source_id""",
+        (store_id,),
+    ).fetchone()[0]
+    conn.commit()
+    return source_id
+
+
+def post_transaction(client, user_id, store_id, **overrides):
+    payload = {
+        "store_id": str(store_id),
+        "client_txn_id": str(uuid4()),
+        "amount_zar": "100.25",
+        "payment_method": "cash",
+    }
+    payload.update(overrides)
+    return client.post("/transactions", headers=login(client, user_id), json=payload)
 
 
 # --- authentication -----------------------------------------------------------
@@ -197,7 +229,7 @@ def test_transactions_excludes_voided_orders_newest_first_and_honours_limit(clie
 
     rows = client.get("/api/transactions", headers=headers).json()
     assert [row["amount_zar"] for row in rows] == [30.0, 20.0, 10.0]
-    assert {"transaction_id", "amount_zar", "quantity", "raw_message", "payment_method",
+    assert {"transaction_id", "amount_zar", "quantity", "payment_method",
             "transaction_date"} == set(rows[0])
 
     assert len(client.get("/api/transactions?limit=2", headers=headers).json()) == 2
@@ -231,23 +263,99 @@ def test_revenue_days_filter(client, conn):
     assert len(client.get("/api/revenue?days=30", headers=headers).json()) == 1
 
 
-def test_payment_methods_include_an_unknown_bucket(client, conn):
+def test_payment_methods_include_recorded_methods(client, conn):
     user = uuid4()
     _, store_id, source_id = make_merchant(conn, "TEST Shop", owner=user)
     add_sale(conn, store_id, source_id, 300, payment="cash")
     add_sale(conn, store_id, source_id, 100, payment="digital")
-    conn.execute(
-        """INSERT INTO transactions (store_id, source_id, input_type, amount_zar, payment_method)
-           VALUES (%s, %s, 'manual', 100, NULL)""",
-        (store_id, source_id),
-    )
-    conn.commit()
-
     data = client.get("/api/payment-methods", headers=login(client, user)).json()
     by_method = {row["payment_method"]: row for row in data}
     assert by_method["cash"]["amount"] == 300.0
-    assert by_method["unknown"]["amount"] == 100.0
+    assert by_method["digital"]["amount"] == 100.0
     assert round(sum(row["pct"] for row in data)) == 100
+
+
+def test_pwa_transaction_success_and_duplicate_is_idempotent(client, conn):
+    user = uuid4()
+    _, store_id, _ = make_merchant(conn, "TEST PWA", owner=user, role="employee")
+    source_id = add_pwa_source(conn, store_id)
+    client_txn_id = str(uuid4())
+    payload = {
+        "store_id": str(store_id),
+        "client_txn_id": client_txn_id,
+        "amount_zar": "123.45",
+        "payment_method": "digital",
+        "offering_name": "Shirt",
+        "quantity": 2,
+    }
+
+    first = client.post(
+        "/transactions", headers=login(client, user), json=payload
+    )
+    assert first.status_code == 200
+    first_data = first.json()
+    assert first_data["amount_zar"] == 123.45
+    assert first_data["source_id"] == str(source_id)
+    assert first_data["client_txn_id"] == client_txn_id
+    assert first_data["input_type"] == "pwa"
+    assert first_data["payment_method"] == "digital"
+    assert datetime.fromisoformat(first_data["transaction_date"]).tzinfo is not None
+
+    retry = client.post(
+        "/transactions", headers=login(client, user), json=payload
+    )
+    assert retry.status_code == 200
+    assert retry.json() == first_data
+    assert conn.execute(
+        "SELECT COUNT(*) FROM transactions WHERE store_id = %s AND client_txn_id = %s",
+        (store_id, client_txn_id),
+    ).fetchone()[0] == 1
+    assert conn.execute(
+        "SELECT COUNT(*) FROM offerings WHERE store_id = %s AND lower(offering_name) = 'shirt'",
+        (store_id,),
+    ).fetchone()[0] == 1
+    case_variant = {
+        **payload,
+        "client_txn_id": str(uuid4()),
+        "offering_name": "shirt",
+    }
+    second_offering_sale = client.post(
+        "/transactions", headers=login(client, user), json=case_variant
+    )
+    assert second_offering_sale.status_code == 200
+    assert second_offering_sale.json()["offering_id"] == first_data["offering_id"]
+    assert conn.execute(
+        "SELECT COUNT(*) FROM offerings WHERE store_id = %s AND lower(offering_name) = 'shirt'",
+        (store_id,),
+    ).fetchone()[0] == 1
+
+
+def test_pwa_transaction_rejects_viewer_and_someone_elses_store(client, conn):
+    viewer = uuid4()
+    _, viewer_store, _ = make_merchant(
+        conn, "TEST Viewer", owner=viewer, role="viewer"
+    )
+    add_pwa_source(conn, viewer_store)
+    response = post_transaction(client, viewer, viewer_store)
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Your role does not allow this action"
+
+    owner, other = uuid4(), uuid4()
+    make_merchant(conn, "TEST Owner", owner=owner)
+    _, other_store, _ = make_merchant(conn, "TEST Other", owner=other)
+    add_pwa_source(conn, other_store)
+    response = post_transaction(client, owner, other_store)
+    assert response.status_code == 403
+    assert response.json()["detail"] == "User does not have access to the requested store"
+
+
+def test_pwa_transaction_does_not_accept_client_source_id(client, conn):
+    user = uuid4()
+    _, store_id, _ = make_merchant(conn, "TEST Source", owner=user)
+    add_pwa_source(conn, store_id)
+
+    response = post_transaction(client, user, store_id, source_id=str(uuid4()))
+    assert response.status_code == 422
 
 
 def test_top_offerings_group_case_insensitively_and_honour_limit(client, conn):

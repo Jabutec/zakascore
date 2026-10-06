@@ -50,7 +50,7 @@ def prepare_sales_data(sales_data):
 def prepare_payment_method_data(payment_method_data):
     """{method: amount} -> [{"payment_method", "amount", "pct"}, ...] largest first.
 
-    A missing method (e.g. WhatsApp sales) is labelled "unknown" rather than dropped,
+    A missing method on a historical sale is labelled "unknown" rather than dropped,
     so the chart adds up to total revenue.
     """
     totals = {}

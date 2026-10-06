@@ -57,8 +57,7 @@ def _get_client():
 
         from openai import OpenAI  # imported lazily so tests don't need the package
 
-        # Short timeout: the WhatsApp webhook must answer quickly, and a hung call
-        # would make Twilio retry the message.
+        # Keep the upstream request bounded so parsing cannot block its caller indefinitely.
         _client = OpenAI(api_key=api_key, base_url=BASE_URL, timeout=6.0, max_retries=1)
     return _client
 

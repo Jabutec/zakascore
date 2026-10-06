@@ -114,7 +114,7 @@ def get_my_transactions(
     conn=Depends(get_conn),
 ):
     rows = conn.execute(
-        """SELECT t.transaction_id, t.amount_zar, t.quantity, t.raw_message,
+        """SELECT t.transaction_id, t.amount_zar, t.quantity,
                   t.payment_method, t.transaction_date
            FROM transactions t
            JOIN stores s ON s.store_id = t.store_id
@@ -129,9 +129,8 @@ def get_my_transactions(
             "transaction_id": row[0],
             "amount_zar": round(float(row[1]), 2),
             "quantity": row[2],
-            "raw_message": row[3],
-            "payment_method": row[4],
-            "transaction_date": row[5],
+            "payment_method": row[3],
+            "transaction_date": row[4].isoformat(),
         }
         for row in rows
     ]
@@ -181,8 +180,7 @@ def get_my_payment_methods(
     merchant: CurrentMerchant = Depends(get_current_merchant),
     conn=Depends(get_conn),
 ):
-    """Sales without a recorded payment method (e.g. not yet answered on WhatsApp) show as
-    "unknown" so the chart adds up to total revenue."""
+    """Historical sales without a payment method show as "unknown" so the chart adds up."""
     rows = conn.execute(
         """SELECT COALESCE(t.payment_method, 'unknown') AS payment_method,
                   SUM(t.amount_zar) AS total

@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import uuid4
 from validation.models import Transaction
 from bi.metrics import (
     calculate_total_revenue,
@@ -10,35 +11,24 @@ from bi.metrics import (
     calculate_recency
 )
 
+def make_transaction(amount, transaction_date, payment_method="cash"):
+    return Transaction(
+        transaction_id=uuid4(),
+        store_id=uuid4(),
+        source_id=uuid4(),
+        client_txn_id=uuid4(),
+        input_type="manual",
+        amount_zar=amount,
+        payment_method=payment_method,
+        transaction_date=transaction_date.replace(tzinfo=timezone.utc),
+    )
+
+
 def create_transactions():
     return [
-        Transaction(
-            transaction_id="T001",
-            merchant_id="M001",
-            source_id="S001",
-            input_type=None,
-            amount_zar=100,
-            payment_method="cash",
-            transaction_date=datetime(2026, 8, 1, 10, 0),
-        ),
-        Transaction(
-            transaction_id="T002",
-            merchant_id="M001",
-            source_id="S001",
-            input_type=None,
-            amount_zar=50,
-            payment_method="digital",
-            transaction_date=datetime(2026, 8, 1, 12, 0),
-        ),
-        Transaction(
-            transaction_id="T003",
-            merchant_id="M001",
-            source_id="S001",
-            input_type=None,
-            amount_zar=200,
-            payment_method="digital",
-            transaction_date=datetime(2026, 8, 2, 14, 0),
-        ),
+        make_transaction(100, datetime(2026, 8, 1, 10, 0)),
+        make_transaction(50, datetime(2026, 8, 1, 12, 0), "digital"),
+        make_transaction(200, datetime(2026, 8, 2, 14, 0), "digital"),
     ]
 
 def test_total_revenue():
@@ -118,39 +108,15 @@ def test_revenue_volatility():
 
 def test_revenue_volatility_for_constant_revenue():
     transactions = [
-        Transaction(
-            transaction_id="T001",
-            merchant_id="M001",
-            source_id="S001",
-            input_type=None,
-            amount_zar=100,
-            payment_method="cash",
-            transaction_date=datetime(2026, 8, 1, 10, 0),
-        ),
-        Transaction(
-            transaction_id="T002",
-            merchant_id="M001",
-            source_id="S001",
-            input_type=None,
-            amount_zar=100,
-            payment_method="cash",
-            transaction_date=datetime(2026, 8, 2, 10, 0),
-        ),
+        make_transaction(100, datetime(2026, 8, 1, 10, 0)),
+        make_transaction(100, datetime(2026, 8, 2, 10, 0)),
     ]
 
     assert calculate_revenue_volatility(transactions) == 0.0
     
 def test_revenue_volatility_insufficient_data():
     transactions = [
-        Transaction(
-            transaction_id="T001",
-            merchant_id="M001",
-            source_id="S001",
-            input_type=None,
-            amount_zar=100,
-            payment_method="cash",
-            transaction_date=datetime(2026, 8, 1, 10, 0),
-        )
+        make_transaction(100, datetime(2026, 8, 1, 10, 0))
     ]
 
     assert calculate_revenue_volatility(transactions) == 0.0
@@ -162,7 +128,7 @@ def test_recency():
 
     result = calculate_recency(
         transactions,
-        reference_date
+        reference_date.replace(tzinfo=timezone.utc)
     )
 
     assert result == 2
@@ -170,7 +136,7 @@ def test_recency():
 def test_recency_empty_transactions():
     result = calculate_recency(
         [],
-        datetime(2026, 8, 5, 10, 0)
+        datetime(2026, 8, 5, 10, 0, tzinfo=timezone.utc)
     )
 
     assert result is None
@@ -182,7 +148,7 @@ def test_recency_uses_latest_transaction():
 
     result = calculate_recency(
         transactions,
-        reference_date
+        reference_date.replace(tzinfo=timezone.utc)
     )
 
     assert result == 7

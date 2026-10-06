@@ -1,5 +1,4 @@
-import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID
@@ -20,9 +19,8 @@ SourceID = UUID
 SnapshotID = UUID
 OfferingID = UUID
 
-E164_PATTERN = re.compile(r"^\+[1-9][0-9]{7,14}$")
-# 8 characters, unambiguous alphabet (no I, O, 0, 1). Generate with `secrets`.
-CODE_PATTERN = r"^[A-HJ-NP-Z2-9]{8}$"
+MAX_FUTURE_TRANSACTION_DATE = timedelta(minutes=5)
+MAX_PAST_TRANSACTION_AGE = timedelta(days=30)
 
 
 class StrictModel(BaseModel):
@@ -35,7 +33,7 @@ class InputType(str, Enum):
     POS_TAP = "pos_tap"
     VOICE = "voice"
     MANUAL = "manual"
-    WHATSAPP = "whatsapp"
+    PWA = "pwa"
     CSV = "csv"
     API = "api"
 
@@ -62,14 +60,9 @@ class SourceType(str, Enum):
     BANK_STATEMENT = "bank_statement"
     ACCOUNTING_SOFTWARE = "accounting_software"
     ONLINE_STORE = "online_store"
-    WHATSAPP = "whatsapp"
+    PWA = "pwa"
     CSV = "csv"
     MANUAL = "manual"
-
-
-class ConnectCodePurpose(str, Enum):
-    LINK_WHATSAPP = "link_whatsapp"
-    CLAIM_MERCHANT = "claim_merchant"
 
 
 class Merchant(StrictModel):
@@ -100,86 +93,26 @@ class DataSource(StrictModel):
     store_id: StoreID
     source_name: str
     source_type: SourceType
-    external_identifier: str | None = None  # WhatsApp: E.164 number
+    external_identifier: str | None = None
     is_active: bool = True
     created_at: AwareDatetime | None = None
-
-    @model_validator(mode="after")
-    def validate_whatsapp_number(self):
-        if self.source_type == SourceType.WHATSAPP:
-            if not self.external_identifier or not E164_PATTERN.match(
-                self.external_identifier
-            ):
-                raise ValueError(
-                    "whatsapp data sources need an E.164 number, e.g. +27821234567"
-                )
-        return self
-
-
-class ConnectCode(StrictModel):
-    code: str = Field(pattern=CODE_PATTERN)
-    purpose: ConnectCodePurpose
-    store_id: StoreID
-    created_by_user_id: UUID | None = None  # required for link_whatsapp
-    expires_at: AwareDatetime
-    used_at: AwareDatetime | None = None
-    used_by_user_id: UUID | None = None     # required once a claim_merchant code is used
-    created_at: AwareDatetime | None = None
-
-    @field_validator("code", mode="before")
-    @classmethod
-    def normalize_code(cls, value):
-        # Users type codes by hand into WhatsApp / the dashboard.
-        return value.strip().upper() if isinstance(value, str) else value
-
-    @model_validator(mode="after")
-    def validate_purpose_rules(self):
-        if (
-            self.purpose == ConnectCodePurpose.LINK_WHATSAPP
-            and self.created_by_user_id is None
-        ):
-            raise ValueError("link_whatsapp codes require created_by_user_id")
-        if (
-            self.purpose == ConnectCodePurpose.CLAIM_MERCHANT
-            and self.used_at is not None
-            and self.used_by_user_id is None
-        ):
-            raise ValueError("used claim_merchant codes require used_by_user_id")
-        return self
-
-    @property
-    def used(self) -> bool:
-        return self.used_at is not None
 
 
 class TransactionBase(StrictModel):
     store_id: StoreID  # merchant is derived via the store
     source_id: SourceID
+    client_txn_id: UUID
     offering_id: OfferingID | None = None
     quantity: int | None = Field(default=None, gt=0)
     input_type: InputType
     # NUMERIC(12,2): reject extra precision here instead of letting Postgres round it
     amount_zar: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
-    payment_method: PaymentMethod | None = None
-    raw_message: str | None = None
-    whatsapp_message_id: str | None = None
+    payment_method: PaymentMethod
 
     @model_validator(mode="after")
     def validate_input_rules(self):
-        if self.input_type == InputType.WHATSAPP:
-            if self.offering_id is None or self.quantity is None:
-                raise ValueError(
-                    "offering_id and quantity are required for whatsapp transactions"
-                )
-            if not self.whatsapp_message_id:
-                raise ValueError(
-                    "whatsapp_message_id (Twilio MessageSid) is required for "
-                    "whatsapp transactions"
-                )
-        elif self.payment_method is None:
-            raise ValueError(
-                f"payment_method is required for input_type '{self.input_type.value}'"
-            )
+        if self.quantity is not None and self.offering_id is None:
+            raise ValueError("offering_id is required when quantity is provided")
         return self
 
 
@@ -189,6 +122,16 @@ class TransactionCreate(TransactionBase):
     transaction_date: AwareDatetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+
+    @field_validator("transaction_date")
+    @classmethod
+    def validate_transaction_date(cls, value):
+        now = datetime.now(timezone.utc)
+        if value > now + MAX_FUTURE_TRANSACTION_DATE:
+            raise ValueError("transaction_date cannot be more than 5 minutes in the future")
+        if value < now - MAX_PAST_TRANSACTION_AGE:
+            raise ValueError("transaction_date cannot be more than 30 days in the past")
+        return value
 
 
 class Transaction(TransactionBase):

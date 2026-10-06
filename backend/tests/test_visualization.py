@@ -101,7 +101,7 @@ def test_prepare_payment_method_data():
 
 
 def test_prepare_payment_method_data_labels_missing_method_unknown():
-    # WhatsApp sales have no payment method; None and "" both map to "unknown" and merge
+    # Legacy sales without a payment method map to "unknown" and merge
     result = prepare_payment_method_data({"Cash": 600, None: 300, "": 100})
 
     assert result == [

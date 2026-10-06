@@ -6,7 +6,6 @@ import pytest
 from pydantic import ValidationError
 
 from validation.models import (
-    ConnectCode,
     DataSource,
     FinancialSnapshot,
     Merchant,
@@ -29,23 +28,12 @@ def transaction_data(**overrides):
         "transaction_id": uuid4(),
         "store_id": uuid4(),
         "source_id": uuid4(),
+        "client_txn_id": uuid4(),
         "input_type": "pos_tap",
         "amount_zar": Decimal("100.00"),
         "payment_method": "digital",
         "transaction_date": now(),
     }
-    data.update(overrides)
-    return data
-
-
-def whatsapp_transaction_data(**overrides):
-    data = transaction_data(
-        input_type="whatsapp",
-        payment_method=None,
-        offering_id=uuid4(),
-        quantity=2,
-        whatsapp_message_id="SM1234567890",
-    )
     data.update(overrides)
     return data
 
@@ -74,18 +62,6 @@ def data_source_data(**overrides):
         "source_name": "Vertical",
         "source_type": "pos",
         "created_at": now(),
-    }
-    data.update(overrides)
-    return data
-
-
-def connect_code_data(**overrides):
-    data = {
-        "code": "ABCD2345",
-        "purpose": "link_whatsapp",
-        "store_id": uuid4(),
-        "created_by_user_id": uuid4(),
-        "expires_at": now() + timedelta(hours=1),
     }
     data.update(overrides)
     return data
@@ -134,7 +110,7 @@ def test_invalid_input_type(input_type):
         Transaction(**transaction_data(input_type=input_type))
 
 
-@pytest.mark.parametrize("input_type", ["pos_tap", "voice", "manual", "csv", "api"])
+@pytest.mark.parametrize("input_type", ["pos_tap", "voice", "manual", "pwa", "csv", "api"])
 def test_valid_input_type(input_type):
     transaction = Transaction(**transaction_data(input_type=input_type))
 
@@ -165,32 +141,17 @@ def test_transaction_rejects_naive_datetime():
 @pytest.mark.parametrize("quantity", [0, -1])
 def test_transaction_quantity_must_be_positive(quantity):
     with pytest.raises(ValidationError):
-        Transaction(**transaction_data(quantity=quantity))
+        Transaction(**transaction_data(offering_id=uuid4(), quantity=quantity))
 
 
-def test_payment_method_required_for_non_whatsapp():
+def test_payment_method_is_required():
     with pytest.raises(ValidationError):
         Transaction(**transaction_data(payment_method=None))
 
 
-# ---------- Transaction: whatsapp rules ----------
-
-def test_valid_whatsapp_transaction_without_payment_method():
-    transaction = Transaction(**whatsapp_transaction_data())
-
-    assert transaction.input_type == "whatsapp"
-    assert transaction.payment_method is None
-
-
-@pytest.mark.parametrize("missing", ["offering_id", "quantity", "whatsapp_message_id"])
-def test_whatsapp_transaction_requires_fields(missing):
+def test_quantity_requires_offering_id():
     with pytest.raises(ValidationError):
-        Transaction(**whatsapp_transaction_data(**{missing: None}))
-
-
-def test_whatsapp_transaction_rejects_empty_message_id():
-    with pytest.raises(ValidationError):
-        Transaction(**whatsapp_transaction_data(whatsapp_message_id=""))
+        Transaction(**transaction_data(quantity=2))
 
 
 # ---------- Transaction: void state ----------
@@ -231,6 +192,43 @@ def test_transaction_create_rejects_transaction_id():
         TransactionCreate(**{**transaction_data(), "transaction_id": uuid4()})
 
 
+def test_client_transaction_id_is_required():
+    transaction = transaction_data()
+    del transaction["client_txn_id"]
+    with pytest.raises(ValidationError):
+        Transaction(**transaction)
+
+    transaction_create = transaction_data()
+    del transaction_create["transaction_id"]
+    del transaction_create["client_txn_id"]
+    with pytest.raises(ValidationError):
+        TransactionCreate(**transaction_create)
+
+
+def test_transaction_create_rejects_dates_outside_allowed_window():
+    base = transaction_data()
+    del base["transaction_id"]
+    with pytest.raises(ValidationError):
+        TransactionCreate(
+            **{**base, "transaction_date": now() + timedelta(minutes=6)}
+        )
+    with pytest.raises(ValidationError):
+        TransactionCreate(
+            **{**base, "transaction_date": now() - timedelta(days=31)}
+        )
+
+
+def test_transaction_create_accepts_dates_inside_allowed_window():
+    base = transaction_data()
+    del base["transaction_id"]
+    assert TransactionCreate(
+        **{**base, "transaction_date": now() + timedelta(minutes=4)}
+    )
+    assert TransactionCreate(
+        **{**base, "transaction_date": now() - timedelta(days=29)}
+    )
+
+
 # ---------- Merchant / MerchantUser / Store / Offering ----------
 
 def test_merchant():
@@ -245,16 +243,6 @@ def test_merchant():
 
     assert merchant.merchant_id == merchant_id
     assert merchant.tier == "insights"
-
-
-def test_merchant_rejects_whatsapp_number():
-    # WhatsApp numbers live on data sources now
-    with pytest.raises(ValidationError):
-        Merchant(
-            merchant_id=uuid4(),
-            business_name="vertical",
-            whatsapp_number="+27821234567",
-        )
 
 
 def test_merchant_rejects_invalid_tier():
@@ -289,95 +277,13 @@ def test_invalid_source_type(source_type):
 
 @pytest.mark.parametrize(
     "source_type",
-    ["pos", "bank_statement", "accounting_software", "online_store", "csv", "manual"],
+    ["pos", "bank_statement", "accounting_software", "online_store", "pwa", "csv", "manual"],
 )
 def test_valid_source_type(source_type):
     source = DataSource(**data_source_data(source_type=source_type))
 
     assert source.source_type == source_type
     assert source.is_active is True
-
-
-def test_valid_whatsapp_data_source():
-    source = DataSource(
-        **data_source_data(source_type="whatsapp", external_identifier="+27821234567")
-    )
-
-    assert source.external_identifier == "+27821234567"
-
-
-@pytest.mark.parametrize(
-    "number",
-    [None, "", "0821234567", "27821234567", "+0821234567", "+2782", "+278212345678901234", "+27 82 123 4567"],
-)
-def test_whatsapp_data_source_requires_e164_number(number):
-    with pytest.raises(ValidationError):
-        DataSource(**data_source_data(source_type="whatsapp", external_identifier=number))
-
-
-# ---------- ConnectCode ----------
-
-def test_valid_connect_code():
-    code = ConnectCode(**connect_code_data())
-
-    assert code.code == "ABCD2345"
-    assert code.used is False
-
-
-def test_connect_code_is_normalized():
-    code = ConnectCode(**connect_code_data(code="  abcd2345 "))
-
-    assert code.code == "ABCD2345"
-
-
-@pytest.mark.parametrize(
-    "code",
-    ["ABCD234", "ABCD23456", "ABCD2340", "ABCD2341", "ABCDI234", "ABCDO234", "ABCD-234", ""],
-)
-def test_connect_code_rejects_bad_codes(code):
-    # wrong length, or characters outside the unambiguous alphabet (no I, O, 0, 1)
-    with pytest.raises(ValidationError):
-        ConnectCode(**connect_code_data(code=code))
-
-
-def test_link_whatsapp_code_requires_creator():
-    with pytest.raises(ValidationError):
-        ConnectCode(**connect_code_data(created_by_user_id=None))
-
-
-def test_claim_merchant_code_does_not_require_creator_when_unused():
-    code = ConnectCode(
-        **connect_code_data(purpose="claim_merchant", created_by_user_id=None)
-    )
-
-    assert code.used is False
-
-
-def test_used_claim_merchant_code_requires_used_by_user():
-    with pytest.raises(ValidationError):
-        ConnectCode(
-            **connect_code_data(
-                purpose="claim_merchant", created_by_user_id=None, used_at=now()
-            )
-        )
-
-
-def test_used_claim_merchant_code_with_user_is_valid():
-    code = ConnectCode(
-        **connect_code_data(
-            purpose="claim_merchant",
-            created_by_user_id=None,
-            used_at=now(),
-            used_by_user_id=uuid4(),
-        )
-    )
-
-    assert code.used is True
-
-
-def test_connect_code_rejects_naive_expiry():
-    with pytest.raises(ValidationError):
-        ConnectCode(**connect_code_data(expires_at=datetime.now()))
 
 
 # ---------- FinancialSnapshot ----------

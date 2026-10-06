@@ -60,7 +60,7 @@ def determine_activity_status(days_since_transaction):
 def determine_digital_payment_adoption(cash_revenue, digital_revenue, total_revenue=None):
     """Digital share of revenue with a KNOWN payment method.
 
-    WhatsApp transactions have no payment method recorded, so cash + digital can be
+    Historical transactions may have no payment method recorded, so cash + digital can be
     far below total revenue. Pass total_revenue so we don't judge adoption from a
     handful of known transactions.
     """

@@ -30,19 +30,18 @@ SOURCE_TYPES = [
     "online_store",
     "bank_statement",
     "accounting_software",
-    "whatsapp",
+    "pwa",
     "manual",
     "csv",
 ]
 
 # Every input type is recorded against a matching source, so grouping by
-# source in the BI layer gives meaningful results. Voice notes arrive via WhatsApp.
+# source in the BI layer gives meaningful results.
 INPUT_TO_SOURCE = {
     "pos_tap": "pos",
     "manual": "manual",
     "csv": "csv",
-    "whatsapp": "whatsapp",
-    "voice": "whatsapp",
+    "pwa": "pwa",
 }
 
 SA_CITIES = [
@@ -62,14 +61,11 @@ WIPE_ORDER = [
     "financial_snapshots",
     "transactions",
     "offerings",
-    "connect_codes",
     "data_sources",
     "merchant_users",
     "stores",
     "merchants",
 ]
-
-UNCLAIMED_CLAIM_CODE = "TESTCLAM"  # matches the 8-char code alphabet
 
 
 def _assert_safe_to_seed() -> None:
@@ -148,7 +144,6 @@ def seed_data():
                 (merchant_id, "Main Store", random.choice(SA_CITIES)),
             ).fetchone()[0]
 
-            whatsapp_number = f"+27{random.randint(600000000, 899999999)}"
             sources = {}
             for source_type in SOURCE_TYPES:
                 sources[source_type] = cursor.execute(
@@ -157,9 +152,13 @@ def seed_data():
                        VALUES (%s, %s, %s, %s) RETURNING source_id""",
                     (
                         store_id,
-                        source_type.replace("_", " ").title(),
+                        (
+                            "PWA"
+                            if source_type == "pwa"
+                            else source_type.replace("_", " ").title()
+                        ),
                         source_type,
-                        whatsapp_number if source_type == "whatsapp" else None,
+                        None,
                     ),
                 ).fetchone()[0]
 
@@ -179,43 +178,19 @@ def seed_data():
                 {"store_id": store_id, "sources": sources, "offerings": offerings}
             )
 
-        # WhatsApp-first fixture: a merchant with NO owner and a known claim code,
-        # for testing the dashboard "claim your business" step.
-        unclaimed_merchant_id = cursor.execute(
-            """INSERT INTO merchants (business_name, location)
-               VALUES ('Unclaimed Demo Spaza', 'Soweto') RETURNING merchant_id"""
-        ).fetchone()[0]
-        unclaimed_store_id = cursor.execute(
-            """INSERT INTO stores (merchant_id, store_name)
-               VALUES (%s, 'Main Store') RETURNING store_id""",
-            (unclaimed_merchant_id,),
-        ).fetchone()[0]
-        cursor.execute(
-            """INSERT INTO data_sources
-                   (store_id, source_name, source_type, external_identifier)
-               VALUES (%s, 'Whatsapp', 'whatsapp', '+27500000000')""",
-            (unclaimed_store_id,),
-        )
-        cursor.execute(
-            """INSERT INTO connect_codes (code, purpose, store_id, expires_at)
-               VALUES (%s, 'claim_merchant', %s, now() + interval '365 days')""",
-            (UNCLAIMED_CLAIM_CODE, unclaimed_store_id),
-        )
-
         for _ in range(300):
             store = random.choice(stores)
             input_type = random.choice(list(INPUT_TO_SOURCE))
             source_id = store["sources"][INPUT_TO_SOURCE[input_type]]
             amount_zar = round(random.uniform(50, 5000), 2)
 
-            if input_type == "whatsapp":
-                payment_method = None
-                offering_id = random.choice(store["offerings"])
-                quantity = random.randint(1, 5)
-            else:
-                payment_method = random.choice(["cash", "digital"])
-                offering_id = None
-                quantity = None
+            payment_method = random.choice(["cash", "digital"])
+            offering_id = (
+                random.choice(store["offerings"])
+                if random.random() < 0.35
+                else None
+            )
+            quantity = random.randint(1, 5) if offering_id is not None else None
 
             transaction_date = window_start + timedelta(
                 seconds=random.randint(0, window_seconds)
@@ -230,21 +205,20 @@ def seed_data():
 
             cursor.execute(
                 """INSERT INTO transactions (
-                       store_id, source_id, offering_id, quantity, input_type,
-                       amount_zar, payment_method, raw_message,
-                       whatsapp_message_id, is_voided, voided_at, transaction_date
+                       store_id, source_id, client_txn_id, offering_id, quantity,
+                       input_type, amount_zar, payment_method, is_voided,
+                       voided_at, transaction_date
                    )
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (
                     store["store_id"],
                     source_id,
+                    _uuid(),
                     offering_id,
                     quantity,
                     input_type,
                     amount_zar,
                     payment_method,
-                    str(int(amount_zar)) if input_type == "whatsapp" else None,
-                    f"SM{_uuid().hex[:32]}" if input_type == "whatsapp" else None,
                     is_voided,
                     voided_at,
                     transaction_date,
@@ -320,7 +294,6 @@ def seed_data():
                 previous_revenue = total_revenue
 
     print("Data seeded successfully.")
-    print(f"Unclaimed merchant claim code: {UNCLAIMED_CLAIM_CODE}")
     if owner_user_id:
         print("First merchant is owned by SEED_OWNER_USER_ID.")
 

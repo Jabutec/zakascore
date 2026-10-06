@@ -9,7 +9,6 @@ pytest==9.1.1
 python-dotenv
 python-multipart
 requests
-twilio
 uvicorn
 word2number
 psycopg[binary]
