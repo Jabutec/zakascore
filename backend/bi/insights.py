@@ -6,20 +6,21 @@ def generate_revenue_insight(revenue_trend):
         return "Revenue is declining."
 
     if revenue_trend == "stable":
-        return "Revenue is relatively stable."
+        return "Revenue is flat compared with the previous 30 days."
 
     return "Revenue insight is unavailable."
 
 
 def generate_stability_insight(revenue_stability):
+    # NOTE: "high" stability means LOW volatility (see determine_revenue_stability).
     if revenue_stability == "high":
-        return "Revenue is highly volatile."
+        return "Daily revenue is consistent."
 
     if revenue_stability == "moderate":
-        return "Revenue shows moderate volatility."
+        return "Daily revenue varies moderately."
 
     if revenue_stability == "low":
-        return "Revenue is relatively stable."
+        return "Daily revenue is highly volatile."
 
     return "Revenue stability insight is unavailable."
 
