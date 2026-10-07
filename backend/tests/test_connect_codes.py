@@ -7,10 +7,8 @@ import pytest
 
 from services.onboarding import (
     create_dashboard_merchant,
-    create_whatsapp_merchant,
     issue_connect_code,
     redeem_connect_code_for_user,
-    redeem_connect_code_for_whatsapp,
 )
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -65,70 +63,27 @@ def test_dashboard_first_creates_owner_store_pwa_source_and_code(conn):
     ).fetchone() == (result["store_id"], None)
 
 
-def test_whatsapp_first_onboarding_creates_source_then_user_can_claim_owner(conn):
-    result = create_whatsapp_merchant(
-        "whatsapp:+27820000001", "TEST ConnectCode WhatsApp", conn
+def test_connect_code_joins_a_separate_user_as_employee(conn):
+    owner = uuid4()
+    result = create_dashboard_merchant(
+        owner, "TEST ConnectCode Team", conn, store_name="Team Store"
     )
     user_id = uuid4()
 
-    claimed = redeem_connect_code_for_user(result["connect_code"], user_id, conn)
+    linked = redeem_connect_code_for_user(result["connect_code"], user_id, conn)
 
-    assert claimed == {
+    assert linked == {
         "store_id": result["store_id"],
         "merchant_id": result["merchant_id"],
     }
     assert conn.execute(
         "SELECT role FROM merchant_users WHERE user_id = %s AND merchant_id = %s",
         (user_id, result["merchant_id"]),
+    ).fetchone() == ("employee",)
+    assert conn.execute(
+        "SELECT role FROM merchant_users WHERE user_id = %s AND merchant_id = %s",
+        (owner, result["merchant_id"]),
     ).fetchone() == ("owner",)
-    assert conn.execute(
-        """SELECT external_identifier FROM data_sources
-           WHERE source_id = %s AND store_id = %s AND source_type = 'whatsapp'""",
-        (result["source_id"], result["store_id"]),
-    ).fetchone() == ("+27820000001",)
-
-
-def test_dashboard_connect_code_links_whatsapp_idempotently(conn):
-    result = _new_dashboard_store(conn, "WhatsApp")
-
-    linked = redeem_connect_code_for_whatsapp(
-        result["connect_code"], "whatsapp:+27820000002", conn
-    )
-    next_code = issue_connect_code(result["store_id"], conn)
-    repeated = redeem_connect_code_for_whatsapp(
-        next_code, "+27820000002", conn
-    )
-
-    assert linked["source_id"] == repeated["source_id"]
-    assert conn.execute(
-        """SELECT count(*) FROM data_sources
-           WHERE store_id = %s AND source_type = 'whatsapp'
-             AND external_identifier = %s""",
-        (result["store_id"], "+27820000002"),
-    ).fetchone() == (1,)
-
-
-def test_whatsapp_number_cannot_be_moved_between_stores_and_code_rolls_back(conn):
-    first = _new_dashboard_store(conn, "First")
-    second = _new_dashboard_store(conn, "Second")
-    redeem_connect_code_for_whatsapp(
-        first["connect_code"], "+27820000003", conn
-    )
-
-    with pytest.raises(ValueError, match="already connected"):
-        redeem_connect_code_for_whatsapp(
-            second["connect_code"], "+27820000003", conn
-        )
-
-    assert conn.execute(
-        "SELECT used_at FROM connect_codes WHERE code = %s",
-        (second["connect_code"],),
-    ).fetchone() == (None,)
-    assert conn.execute(
-        """SELECT store_id FROM data_sources
-           WHERE source_type = 'whatsapp' AND external_identifier = %s""",
-        ("+27820000003",),
-    ).fetchone() == (first["store_id"],)
 
 
 @pytest.mark.parametrize("code", ["NO-SUCH-CODE"])
@@ -154,20 +109,18 @@ def test_expired_code_is_not_consumed(conn):
     ).fetchone() == (None,)
 
 
-def test_code_cannot_assign_a_second_owner_to_dashboard_business(conn):
-    result = _new_dashboard_store(conn, "Owner")
+def test_user_cannot_redeem_an_invite_to_their_existing_business(conn):
+    owner = uuid4()
+    result = create_dashboard_merchant(owner, "TEST ConnectCode Existing", conn)
+    next_code = issue_connect_code(result["store_id"], conn)
 
     with pytest.raises(ValueError, match="Invalid or expired"):
-        redeem_connect_code_for_user(result["connect_code"], uuid4(), conn)
+        redeem_connect_code_for_user(next_code, owner, conn)
 
     assert conn.execute(
         "SELECT used_at FROM connect_codes WHERE code = %s",
-        (result["connect_code"],),
+        (next_code,),
     ).fetchone() == (None,)
-    assert conn.execute(
-        "SELECT count(*) FROM merchant_users WHERE merchant_id = %s AND role = 'owner'",
-        (result["merchant_id"],),
-    ).fetchone() == (1,)
 
 
 def test_deleted_store_invalidates_its_connect_code(conn):
@@ -180,8 +133,8 @@ def test_deleted_store_invalidates_its_connect_code(conn):
 
 
 def test_concurrent_redemptions_have_at_most_one_success(conn):
-    result = create_whatsapp_merchant(
-        "+27820000004", "TEST ConnectCode Concurrent", conn
+    result = create_dashboard_merchant(
+        uuid4(), "TEST ConnectCode Concurrent", conn
     )
     users = (uuid4(), uuid4())
 
@@ -202,4 +155,4 @@ def test_concurrent_redemptions_have_at_most_one_success(conn):
     assert conn.execute(
         "SELECT count(*) FROM merchant_users WHERE merchant_id = %s",
         (result["merchant_id"],),
-    ).fetchone() == (1,)
+    ).fetchone() == (2,)

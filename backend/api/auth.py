@@ -26,6 +26,7 @@ from services.authorization import get_user_merchants, require_merchant_access
 from services.credit_scoring import InsufficientHistoryError, get_merchant_credit_assessment
 from services.onboarding import (
     create_dashboard_merchant,
+    issue_connect_code,
     redeem_connect_code_for_user,
 )
 from services.tiers import get_entitlements
@@ -121,6 +122,10 @@ class ConnectCodeRedemption(BaseModel):
     code: str = Field(min_length=1, max_length=32)
 
 
+class ConnectCodeIssue(BaseModel):
+    store_id: UUID
+
+
 @router.post("/api/onboarding/dashboard", status_code=201)
 def create_dashboard_onboarding(
     request: DashboardOnboardingRequest,
@@ -153,6 +158,104 @@ def redeem_dashboard_connect_code(
         ) from error
 
 
+@router.post("/api/connect-codes", status_code=201)
+def issue_dashboard_connect_code(
+    request: ConnectCodeIssue,
+    user_id: str = Depends(get_current_user_id),
+    conn=Depends(get_conn),
+):
+    try:
+        require_store_access(user_id, request.store_id, conn, min_role="admin")
+        code = issue_connect_code(request.store_id, conn)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {"code": code}
+
+
+@router.get("/api/businesses")
+def get_my_businesses(
+    merchant: CurrentMerchant = Depends(get_current_merchant),
+    conn=Depends(get_conn),
+):
+    rows = conn.execute(
+        """SELECT m.merchant_id, m.business_name, mu.role,
+                  s.store_id, s.store_name,
+                  EXISTS (
+                      SELECT 1 FROM data_sources ds
+                      WHERE ds.store_id = s.store_id
+                        AND ds.source_type = 'pwa'
+                        AND ds.is_active = TRUE
+                  ) AS pwa_logging_enabled
+           FROM merchant_users mu
+           JOIN merchants m ON m.merchant_id = mu.merchant_id
+           LEFT JOIN stores s ON s.merchant_id = m.merchant_id
+           WHERE mu.user_id = %s
+           ORDER BY mu.created_at, s.created_at, s.store_name""",
+        (merchant.user_id,),
+    ).fetchall()
+    businesses_by_id = {}
+    for row in rows:
+        merchant_id = str(row[0])
+        business = businesses_by_id.setdefault(
+            merchant_id,
+            {
+                "merchant_id": merchant_id,
+                "business_name": row[1],
+                "role": row[2],
+                "stores": [],
+            },
+        )
+        if row[3] is not None:
+            business["stores"].append(
+                {
+                    "store_id": str(row[3]),
+                    "store_name": row[4],
+                    "pwa_logging_enabled": row[5],
+                }
+            )
+    return {
+        "selected_merchant_id": str(merchant.merchant_id),
+        "businesses": list(businesses_by_id.values()),
+    }
+
+
+@router.get("/api/stores")
+def get_my_stores(
+    merchant: CurrentMerchant = Depends(get_current_merchant),
+    conn=Depends(get_conn),
+):
+    """Stores with an active PWA logging source for the selected business."""
+    rows = conn.execute(
+        """SELECT m.merchant_id, m.business_name, s.store_id, s.store_name
+           FROM stores s
+           JOIN merchants m ON m.merchant_id = s.merchant_id
+           WHERE s.merchant_id = %s
+             AND EXISTS (
+                 SELECT 1
+                 FROM data_sources ds
+                 WHERE ds.store_id = s.store_id
+                   AND ds.source_type = 'pwa'
+                   AND ds.is_active = TRUE
+             )
+           ORDER BY s.created_at, s.store_name""",
+        (merchant.merchant_id,),
+    ).fetchall()
+    return {
+        "role": merchant.role,
+        "stores": [
+            {"store_id": str(row[2]), "store_name": row[3]}
+            for row in rows
+        ],
+        "merchant_id": str(merchant.merchant_id),
+        "business_name": conn.execute(
+            "SELECT business_name FROM merchants WHERE merchant_id = %s",
+            (merchant.merchant_id,),
+        ).fetchone()[0],
+    }
+
+
 @router.get("/api/transactions")
 def get_my_transactions(
     limit: int = Query(20, ge=1, le=100),
@@ -161,9 +264,11 @@ def get_my_transactions(
 ):
     rows = conn.execute(
         """SELECT t.transaction_id, t.amount_zar, t.quantity,
-                  t.payment_method, t.transaction_date
+                  t.payment_method, t.transaction_date, o.offering_name,
+                  s.store_name, t.input_type
            FROM transactions t
            JOIN stores s ON s.store_id = t.store_id
+           LEFT JOIN offerings o ON o.offering_id = t.offering_id
            WHERE s.merchant_id = %s AND t.is_voided = FALSE
            ORDER BY t.transaction_date DESC
            LIMIT %s""",
@@ -177,6 +282,9 @@ def get_my_transactions(
             "quantity": row[2],
             "payment_method": row[3],
             "transaction_date": row[4].isoformat(),
+            "offering_name": row[5],
+            "store_name": row[6],
+            "input_type": row[7],
         }
         for row in rows
     ]

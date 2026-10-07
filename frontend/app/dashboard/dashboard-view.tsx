@@ -8,8 +8,21 @@ export interface Transaction {
   transaction_id: string;
   amount_zar: number;
   quantity: number | null;
-  raw_message: string | null;
+  offering_name: string | null;
+  store_name: string;
+  input_type: string;
   transaction_date: string;
+}
+
+export interface Business {
+  merchant_id: string;
+  business_name: string;
+  role: "owner" | "admin" | "employee" | "viewer";
+  stores: {
+    store_id: string;
+    store_name: string;
+    pwa_logging_enabled: boolean;
+  }[];
 }
 
 export interface RevenuePoint {
@@ -52,6 +65,8 @@ interface DashboardViewProps {
   overview: DashboardOverview;
   paymentMethods: PaymentMethod[];
   creditScore: CreditScore;
+  businesses: Business[];
+  selectedBusiness: Business;
 }
 
 const currency = new Intl.NumberFormat("en-ZA", {
@@ -171,12 +186,17 @@ export default function DashboardView({
   overview,
   paymentMethods,
   creditScore,
+  businesses,
+  selectedBusiness,
 }: DashboardViewProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState<7 | 30 | 0>(30);
   const [showNotifications, setShowNotifications] = useState(false);
   const [signOutError, setSignOutError] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   async function signOut() {
     setSignOutError("");
@@ -193,6 +213,43 @@ export default function DashboardView({
     }
   }
 
+  async function inviteTeamMember() {
+    const store = selectedBusiness.stores.find((item) => item.pwa_logging_enabled);
+    if (!store) {
+      setInviteError("This business does not have a store enabled for sale logging.");
+      return;
+    }
+    setInviteCode("");
+    setInviteError("");
+    setInviteLoading(true);
+    try {
+      const response = await fetch("/api/backend/api/connect-codes", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ store_id: store.store_id }),
+      });
+      const result: unknown = await response.json();
+      if (!response.ok) {
+        const detail =
+          result && typeof result === "object" && "detail" in result &&
+          typeof (result as { detail: unknown }).detail === "string"
+            ? (result as { detail: string }).detail
+            : `Unable to create an invite (HTTP ${response.status}).`;
+        setInviteError(detail);
+        return;
+      }
+      if (!result || typeof result !== "object" || !("code" in result) || typeof result.code !== "string") {
+        setInviteError("The server returned an invalid invite code.");
+        return;
+      }
+      setInviteCode(result.code);
+    } catch {
+      setInviteError("Could not reach ZakaScore. Check your connection and try again.");
+    } finally {
+      setInviteLoading(false);
+    }
+  }
+
   const chartPoints = (() => {
     if (period === 0) return revenue;
     const latestDate = revenue.length > 0 ? new Date(revenue[revenue.length - 1].date) : null;
@@ -206,7 +263,7 @@ export default function DashboardView({
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return transactions;
     return transactions.filter((transaction) =>
-      `${transaction.transaction_id} ${transaction.amount_zar} ${transaction.quantity ?? ""} ${transaction.raw_message ?? ""} ${transaction.transaction_date}`
+      `${transaction.transaction_id} ${transaction.amount_zar} ${transaction.quantity ?? ""} ${transaction.offering_name ?? ""} ${transaction.store_name} ${transaction.transaction_date}`
         .toLowerCase()
         .includes(normalizedQuery),
     );
@@ -264,8 +321,8 @@ export default function DashboardView({
           <div className="sidebar-identity">
             <div className="avatar avatar-small">ZS</div>
             <div className="identity-copy">
-              <strong>Business profile</strong>
-              <span>Profile details unavailable</span>
+              <strong>{selectedBusiness.business_name}</strong>
+              <span>{titleCase(selectedBusiness.role)} · {selectedBusiness.stores.length} {selectedBusiness.stores.length === 1 ? "store" : "stores"}</span>
             </div>
           </div>
         </div>
@@ -307,7 +364,7 @@ export default function DashboardView({
             </div>
             <div className="profile-button" id="profile">
               <span className="avatar">ZS</span>
-              <span className="profile-copy"><strong>Business profile</strong><span>Details unavailable</span></span>
+              <span className="profile-copy"><strong>{selectedBusiness.business_name}</strong><span>{titleCase(selectedBusiness.role)} access</span></span>
             </div>
           </div>
         </header>
@@ -317,9 +374,26 @@ export default function DashboardView({
             <div>
               <p className="eyebrow">FINANCIAL INTELLIGENCE</p>
               <h1>Overview</h1>
-              <p className="page-description">A clear view of your business performance and financial health.</p>
+              <p className="page-description">
+                {selectedBusiness.business_name} · All {selectedBusiness.stores.length} {selectedBusiness.stores.length === 1 ? "store" : "stores"} · A clear view of business performance and financial health.
+              </p>
             </div>
-            <div className="report-date"><span className="live-dot" /> Live business data</div>
+            <div className="report-date">
+              {businesses.length > 1 ? (
+                <label className="business-switcher">
+                  <span>Business</span>
+                  <select
+                    aria-label="Select business workspace"
+                    value={selectedBusiness.merchant_id}
+                    onChange={(event) => router.push(`/dashboard?business=${encodeURIComponent(event.target.value)}`)}
+                  >
+                    {businesses.map((business) => (
+                      <option key={business.merchant_id} value={business.merchant_id}>{business.business_name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : <><span className="live-dot" /> {selectedBusiness.business_name}</>}
+            </div>
           </section>
 
           <section className="metric-grid" aria-label="Business performance metrics" id="score-overview">
@@ -432,7 +506,7 @@ export default function DashboardView({
                   <th>Business</th><th>ZakaScore</th><th>Revenue</th><th>Transactions</th><th>Average transaction</th><th>Score change</th><th>Status</th>
                 </tr></thead>
                 <tbody><tr>
-                  <td><div className="business-cell"><span className="business-mark">B</span><span><strong>Business profile</strong><small>Profile details unavailable</small></span></div></td>
+                  <td><div className="business-cell"><span className="business-mark">B</span><span><strong>{selectedBusiness.business_name}</strong><small>{selectedBusiness.stores.map((store) => store.store_name).join(", ") || "No stores yet"}</small></span></div></td>
                   <td><strong className="score-cell">{score === null ? "—" : score.toFixed(0)}</strong></td>
                   <td>{formatCurrency(overview.total_revenue)}</td>
                   <td>{overview.transaction_count.toLocaleString("en-ZA")}</td>
@@ -456,7 +530,7 @@ export default function DashboardView({
                   <tbody>
                     {filteredTransactions.slice(0, 8).map((transaction) => (
                       <tr key={transaction.transaction_id}>
-                        <td><div className="transaction-cell"><span className="transaction-mark"><Icon name="data" size={16} /></span><span><strong>{transaction.raw_message?.trim() || "Business transaction"}</strong><small>Ref. {transaction.transaction_id.slice(0, 8)}</small></span></div></td>
+                        <td><div className="transaction-cell"><span className="transaction-mark"><Icon name="data" size={16} /></span><span><strong>{transaction.offering_name ?? "Business transaction"}</strong><small>{transaction.store_name} · {titleCase(transaction.input_type)} · Ref. {transaction.transaction_id.slice(0, 8)}</small></span></div></td>
                         <td>{formatDate(transaction.transaction_date)}</td>
                         <td>{transaction.quantity ?? "—"}</td>
                         <td><strong>{formatCurrency(transaction.amount_zar)}</strong></td>
@@ -501,6 +575,21 @@ export default function DashboardView({
               </div>
             </aside>
           </section>
+
+          {selectedBusiness.role === "owner" || selectedBusiness.role === "admin" ? (
+            <section className="panel team-invite-panel">
+              <div>
+                <p className="eyebrow">TEAM ACCESS</p>
+                <h2>Invite a team member</h2>
+                <p>Create a one-time code. A team member signs up with their own account and joins as an employee.</p>
+              </div>
+              <button type="button" className="logging-submit" onClick={() => void inviteTeamMember()} disabled={inviteLoading}>
+                {inviteLoading ? "Creating invite…" : "Create invite code"}
+              </button>
+              {inviteCode && <p className="team-invite-code" role="status">Share once: <strong>{inviteCode}</strong> · expires in 24 hours</p>}
+              {inviteError && <p className="logging-error" role="alert">{inviteError}</p>}
+            </section>
+          ) : null}
 
           <footer className="page-footer"><span>ZakaScore Financial Intelligence</span><span>South Africa · ZAR</span></footer>
         </div>

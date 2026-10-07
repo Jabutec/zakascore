@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from api import auth as api_auth
 from api.webhook import app
-from services.onboarding import create_whatsapp_merchant
+from services.onboarding import create_dashboard_merchant
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -230,8 +230,12 @@ def test_transactions_excludes_voided_orders_newest_first_and_honours_limit(clie
 
     rows = client.get("/api/transactions", headers=headers).json()
     assert [row["amount_zar"] for row in rows] == [30.0, 20.0, 10.0]
-    assert {"transaction_id", "amount_zar", "quantity", "payment_method",
-            "transaction_date"} == set(rows[0])
+    assert {
+        "transaction_id", "amount_zar", "quantity", "payment_method",
+        "transaction_date", "offering_name", "store_name", "input_type",
+    } == set(rows[0])
+    assert rows[0]["store_name"] == "Main"
+    assert rows[0]["input_type"] == "manual"
 
     assert len(client.get("/api/transactions?limit=2", headers=headers).json()) == 2
     assert client.get("/api/transactions?limit=0", headers=headers).status_code == 422
@@ -460,9 +464,38 @@ def test_dashboard_onboarding_creates_owner_membership_and_connect_code(client, 
     ).fetchone() == (UUID(result["store_id"]),)
 
 
+def test_business_list_only_contains_businesses_the_user_can_access(client, conn):
+    user, other_user = uuid4(), uuid4()
+    first_merchant, first_store, _ = make_merchant(
+        conn, "TEST Workspace One", owner=user
+    )
+    make_merchant(conn, "TEST Workspace Other", owner=other_user)
+
+    response = client.get("/api/businesses", headers=login(client, user))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["selected_merchant_id"] == str(first_merchant)
+    assert data["businesses"] == [
+        {
+            "merchant_id": str(first_merchant),
+            "business_name": "TEST Workspace One",
+            "role": "owner",
+            "stores": [
+                {
+                    "store_id": str(first_store),
+                    "store_name": "Main",
+                    "pwa_logging_enabled": False,
+                }
+            ],
+        }
+    ]
+
+
 def test_connect_code_redemption_requires_authentication_and_consumes_valid_code(client, conn):
-    result = create_whatsapp_merchant(
-        "+27820000100", "TEST Connect Redemption", conn
+    owner = uuid4()
+    result = create_dashboard_merchant(
+        owner, "TEST Connect Redemption", conn
     )
     user = uuid4()
 
@@ -484,7 +517,7 @@ def test_connect_code_redemption_requires_authentication_and_consumes_valid_code
     assert conn.execute(
         "SELECT role FROM merchant_users WHERE user_id = %s AND merchant_id = %s",
         (user, result["merchant_id"]),
-    ).fetchone() == ("owner",)
+    ).fetchone() == ("employee",)
     assert conn.execute(
         "SELECT used_at IS NOT NULL FROM connect_codes WHERE code = %s",
         (result["connect_code"],),
@@ -496,3 +529,30 @@ def test_connect_code_redemption_requires_authentication_and_consumes_valid_code
     )
     assert repeated.status_code == 400
     assert repeated.json()["detail"] == "Invalid or expired connect code"
+
+
+def test_admin_can_issue_employee_invite_but_employee_cannot(client, conn):
+    owner, employee = uuid4(), uuid4()
+    merchant_id, store_id, _ = make_merchant(
+        conn, "TEST Team Invites", owner=owner
+    )
+    conn.execute(
+        "INSERT INTO merchant_users (user_id, merchant_id, role) VALUES (%s, %s, 'employee')",
+        (employee, merchant_id),
+    )
+    conn.commit()
+
+    issued = client.post(
+        "/api/connect-codes",
+        headers=login(client, owner),
+        json={"store_id": str(store_id)},
+    )
+    assert issued.status_code == 201
+    assert issued.json()["code"]
+
+    denied = client.post(
+        "/api/connect-codes",
+        headers=login(client, employee),
+        json={"store_id": str(store_id)},
+    )
+    assert denied.status_code == 403

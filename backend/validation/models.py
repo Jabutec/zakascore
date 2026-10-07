@@ -60,7 +60,6 @@ class SourceType(str, Enum):
     BANK_STATEMENT = "bank_statement"
     ACCOUNTING_SOFTWARE = "accounting_software"
     ONLINE_STORE = "online_store"
-    WHATSAPP = "whatsapp"
     PWA = "pwa"
     CSV = "csv"
     MANUAL = "manual"
