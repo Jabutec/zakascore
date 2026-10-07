@@ -13,7 +13,7 @@ def test_invalid_transaction_amount(amount):
     with pytest.raises(ValidationError):
         Transaction(
             transaction_id="T001",
-            merchant_id="M001",
+            store_id="ST001",
             source_id="S001",
             input_type="pos_tap",
             amount_zar=amount,
@@ -25,7 +25,7 @@ def test_invalid_transaction_amount(amount):
 def test_valid_transaction_amount(amount):
     transaction = Transaction(
         transaction_id="T001",
-        merchant_id="M001",
+        store_id="ST001",
         source_id="S001",
         input_type="pos_tap",
         amount_zar=amount,
@@ -35,12 +35,26 @@ def test_valid_transaction_amount(amount):
 
     assert transaction.amount_zar == amount
 
+
+def test_transaction_requires_store_id_instead_of_merchant_id():
+    with pytest.raises(ValidationError):
+        Transaction(
+            transaction_id="T001",
+            merchant_id="M001",
+            source_id="S001",
+            input_type="pos_tap",
+            amount_zar=100,
+            payment_method="cash",
+            transaction_date=datetime.now(),
+        )
+
+
 @pytest.mark.parametrize("payment_method", ["banana", "cheque", "Crypto"])
 def test_invalid_payment_method(payment_method):
     with pytest.raises(ValidationError):
         Transaction(
             transaction_id="T001",
-            merchant_id="M001",
+            store_id="ST001",
             source_id="S001",
             input_type="pos_tap",
             amount_zar=100,
@@ -52,7 +66,7 @@ def test_invalid_payment_method(payment_method):
 def test_valid_payment_method(payment_method):
     transaction = Transaction(
         transaction_id="T001",
-        merchant_id="M001",
+        store_id="ST001",
         source_id="S001",
         input_type="pos_tap",
         amount_zar=100,
@@ -67,7 +81,7 @@ def test_invalid_input_type(input_type):
     with pytest.raises(ValidationError):
         Transaction(
             transaction_id="T001",
-            merchant_id="M001",
+            store_id="ST001",
             source_id="S001",
             input_type=input_type,
             amount_zar=100,
@@ -79,7 +93,7 @@ def test_invalid_input_type(input_type):
 def test_valid_input_type(input_type):
     transaction = Transaction(
         transaction_id="T001",
-        merchant_id="M001",
+        store_id="ST001",
         source_id="S001",
         input_type=input_type,
         amount_zar=100,
@@ -105,6 +119,7 @@ def test_invalid_source_type(source_type):
     with pytest.raises(ValidationError):
         DataSource(
             source_id= "S001",
+            store_id="ST001",
             source_name = "Vertical",
             source_type=source_type,
             created_at= datetime.now()
@@ -114,6 +129,7 @@ def test_invalid_source_type(source_type):
 def test_valid_source_type(source_type):
     datasource = DataSource(
         source_id= "S001",
+        store_id="ST001",
         source_name = "Vertical",
         source_type=source_type,
         created_at= datetime.now()
@@ -131,8 +147,8 @@ def test_valid_source_type(source_type):
 )
 def test_non_negative_fields(field):
     data = {
-        "snapshot_id": "S001",
-        "merchant_id": "M001",
+        "snapshot_id": "F001",
+        "store_id": "ST001",
         "period_start": date(2026, 1, 1),
         "period_end": date(2026, 1, 31),
         "total_revenue_zar": 1000,
@@ -162,7 +178,7 @@ def test_non_negative_fields(field):
 def test_non_negative_accept_valid_fields(field):
     data = {
         "snapshot_id": "F001",   # was "S001"
-        "merchant_id": "M001",
+        "store_id": "ST001",
         "period_start": date(2026, 1, 1),
         "period_end": date(2026, 1, 31),
         "total_revenue_zar": 1000,

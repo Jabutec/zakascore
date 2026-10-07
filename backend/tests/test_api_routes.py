@@ -86,20 +86,82 @@ def test_webhook_registers_new_number(route_database):
         )
     )
 
-    assert response.body.decode() == (
-        "Registered! Now send your sale amounts anytime, e.g. 300"
-    )
+    body = response.body.decode()
+    assert body.startswith("Registered! Your dashboard connect code is ")
+    assert "Enter it after creating your account." in body
     with route_database() as connection:
         merchant = connection.execute(
-            """SELECT m.business_name, ds.external_identifier
+            """SELECT m.business_name, ds.external_identifier, cc.code
                FROM merchants m
                JOIN stores s ON s.merchant_id = m.merchant_id
                JOIN data_sources ds ON ds.store_id = s.store_id
+               JOIN connect_codes cc ON cc.store_id = s.store_id
                WHERE ds.source_type = 'whatsapp'
                  AND ds.external_identifier = %s""",
             ("+27821234568",),
         ).fetchone()
-    assert merchant == ("New Shop", "+27821234568")
+    assert merchant is not None
+    assert merchant[0:2] == ("New Shop", "+27821234568")
+    assert merchant[2] in body
+
+
+def test_webhook_redeems_dashboard_connect_code(route_database):
+    from services.onboarding import create_dashboard_merchant
+
+    with route_database() as connection:
+        onboarding = create_dashboard_merchant(
+            "dashboard-user",
+            "Dashboard Shop",
+            connection,
+            store_name="Main Shop",
+        )
+
+    response = run(
+        webhook.whatsapp_webhook(
+            From="whatsapp:+27821234568",
+            Body=onboarding["connect_code"],
+            NumMedia="0",
+            MediaUrl0=None,
+        )
+    )
+
+    assert response.body.decode() == "Connected! Now send your sale amounts anytime, e.g. 300"
+    with route_database() as connection:
+        source = connection.execute(
+            """SELECT ds.store_id, cc.used
+               FROM data_sources ds
+               JOIN connect_codes cc ON cc.store_id = ds.store_id
+               WHERE ds.source_type = 'whatsapp'
+                 AND ds.external_identifier = %s""",
+            ("+27821234568",),
+        ).fetchone()
+    assert source == (onboarding["store_id"], True)
+
+
+def test_dashboard_onboarding_endpoint_creates_owner_and_connect_code(route_database):
+    response = run(
+        auth.create_dashboard_onboarding(
+            auth.DashboardOnboardingRequest(
+                business_name="Dashboard Shop",
+                store_name="Main Shop",
+            ),
+            user_id="dashboard-user",
+        )
+    )
+
+    with route_database() as connection:
+        membership = connection.execute(
+            """SELECT role FROM merchant_users
+               WHERE user_id = %s AND merchant_id = %s""",
+            ("dashboard-user", response["merchant_id"]),
+        ).fetchone()
+        connect_code = connection.execute(
+            """SELECT 1 FROM connect_codes
+               WHERE code = %s AND store_id = %s AND used = FALSE""",
+            (response["connect_code"], response["store_id"]),
+        ).fetchone()
+    assert membership == ("owner",)
+    assert connect_code == (1,)
 
 
 def test_webhook_logs_parsed_transaction(route_database, monkeypatch):

@@ -1,4 +1,4 @@
-import random
+import secrets
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 
@@ -81,7 +81,13 @@ def generate_next_source_id(conn) -> str:
         return f"S{cur.fetchone()[0] + 1:03d}"
 
 
-def create_merchant(whatsapp_number: str, business_name: str, conn) -> MerchantContext:
+def create_merchant(
+    whatsapp_number: str,
+    business_name: str,
+    conn,
+    *,
+    commit: bool = True,
+) -> MerchantContext:
     merchant_id = generate_next_merchant_id(conn)
     store_id = generate_next_store_id(conn)
     source_id = generate_next_source_id(conn)
@@ -110,46 +116,63 @@ def create_merchant(whatsapp_number: str, business_name: str, conn) -> MerchantC
                VALUES (%s, %s, %s, %s, %s)""",
             (source_id, store_id, "WhatsApp", SourceType.WHATSAPP.value, whatsapp_number),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
     return MerchantContext(merchant=merchant, store_id=store_id, source_id=source_id)
 
 
 def create_dashboard_merchant(user_id: str, business_name: str, conn, *, store_name: str | None = None, code_ttl_hours: int = 24):
-    merchant_id = generate_next_merchant_id(conn)
-    store_id = generate_next_store_id(conn)
     target_store_name = store_name or business_name
 
-    with conn.cursor() as cur:
-        cur.execute(
-            """INSERT INTO merchants (merchant_id, business_name, location, tier)
-               VALUES (%s, %s, %s, %s)""",
-            (merchant_id, business_name, None, Tier.INSIGHTS.value),
-        )
-        cur.execute(
-            """INSERT INTO stores (store_id, merchant_id, store_name, location)
-               VALUES (%s, %s, %s, %s)""",
-            (store_id, merchant_id, target_store_name, None),
-        )
-        cur.execute(
-            """INSERT INTO merchant_users (user_id, merchant_id, role)
-               VALUES (%s, %s, %s)""",
-            (user_id, merchant_id, "owner"),
+    merchant_id = None
+    store_id = None
+    with conn.transaction():
+        merchant_id = generate_next_merchant_id(conn)
+        store_id = generate_next_store_id(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO merchants (merchant_id, business_name, location, tier)
+                   VALUES (%s, %s, %s, %s)""",
+                (merchant_id, business_name, None, Tier.INSIGHTS.value),
+            )
+            cur.execute(
+                """INSERT INTO stores (store_id, merchant_id, store_name, location)
+                   VALUES (%s, %s, %s, %s)""",
+                (store_id, merchant_id, target_store_name, None),
+            )
+            cur.execute(
+                """INSERT INTO merchant_users (user_id, merchant_id, role)
+                   VALUES (%s, %s, %s)""",
+                (user_id, merchant_id, "owner"),
+            )
+        code = create_connect_code(
+            store_id,
+            merchant_id=merchant_id,
+            conn=conn,
+            expires_in_hours=code_ttl_hours,
+            commit=False,
         )
     conn.commit()
-
-    code = create_connect_code(store_id, merchant_id=merchant_id, conn=conn, expires_in_hours=code_ttl_hours)
     return {"merchant_id": merchant_id, "store_id": store_id, "connect_code": code.code}
 
 
 def create_whatsapp_merchant(whatsapp_number: str, business_name: str, conn, *, code_ttl_hours: int = 24):
-    merchant_context = create_merchant(whatsapp_number, business_name, conn)
-    code = create_connect_code(
-        merchant_context.store_id,
-        merchant_id=merchant_context.merchant.merchant_id,
-        conn=conn,
-        expires_in_hours=code_ttl_hours,
-    )
+    with conn.transaction():
+        merchant_context = create_merchant(
+            whatsapp_number,
+            business_name,
+            conn,
+            commit=False,
+        )
+        code = create_connect_code(
+            merchant_context.store_id,
+            merchant_id=merchant_context.merchant.merchant_id,
+            conn=conn,
+            expires_in_hours=code_ttl_hours,
+            commit=False,
+        )
+    conn.commit()
     return {
         "merchant_id": merchant_context.merchant.merchant_id,
         "store_id": merchant_context.store_id,
@@ -158,7 +181,13 @@ def create_whatsapp_merchant(whatsapp_number: str, business_name: str, conn, *, 
     }
 
 
-def link_whatsapp_source_to_store(store_id: str, whatsapp_number: str, conn) -> str:
+def link_whatsapp_source_to_store(
+    store_id: str,
+    whatsapp_number: str,
+    conn,
+    *,
+    commit: bool = True,
+) -> str:
     normalized = whatsapp_number.replace("whatsapp:", "")
     with conn.cursor() as cur:
         cur.execute(
@@ -204,7 +233,8 @@ def link_whatsapp_source_to_store(store_id: str, whatsapp_number: str, conn) -> 
             """,
             (source_id, store_id, "WhatsApp", SourceType.WHATSAPP.value, normalized),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
     return source_id
 
 
@@ -218,14 +248,22 @@ def generate_connect_code(*args, conn=None, code_length: int = 8):
 
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     while True:
-        code = "".join(random.choice(alphabet) for _ in range(code_length))
+        code = "".join(secrets.choice(alphabet) for _ in range(code_length))
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM connect_codes WHERE code = %s", (code,))
             if cur.fetchone() is None:
                 return code
 
 
-def create_connect_code(store_id: str | None = None, *, conn=None, merchant_id: str | None = None, expires_in_hours: int = 24, code_length: int = 8) -> ConnectCode:
+def create_connect_code(
+    store_id: str | None = None,
+    *,
+    conn=None,
+    merchant_id: str | None = None,
+    expires_in_hours: int = 24,
+    code_length: int = 8,
+    commit: bool = True,
+) -> ConnectCode:
     if conn is None:
         raise ValueError("A database connection is required to create a connect code")
 
@@ -240,7 +278,8 @@ def create_connect_code(store_id: str | None = None, *, conn=None, merchant_id: 
                VALUES (%s, %s, %s, %s, %s)""",
             (code, store_id, merchant_id, False, expires_at),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
     return ConnectCode(code=code, store_id=store_id, merchant_id=merchant_id, used=False, expires_at=expires_at)
 
@@ -274,14 +313,20 @@ def redeem_connect_code(code: str, conn, *, expected_store_id: str | None = None
         if store_id is None:
             raise ValueError("Invalid or expired connect code")
 
-        cur.execute("SELECT 1 FROM stores WHERE store_id = %s", (store_id,))
-        if cur.fetchone() is None:
+        cur.execute(
+            """SELECT s.merchant_id
+               FROM stores s
+               JOIN merchants m ON m.merchant_id = s.merchant_id
+               WHERE s.store_id = %s""",
+            (store_id,),
+        )
+        store = cur.fetchone()
+        if store is None:
             raise ValueError("Invalid or expired connect code")
-
-        if merchant_id is not None:
-            cur.execute("SELECT 1 FROM merchants WHERE merchant_id = %s", (merchant_id,))
-            if cur.fetchone() is None:
-                raise ValueError("Invalid or expired connect code")
+        store_merchant_id = store[0]
+        if merchant_id is not None and merchant_id != store_merchant_id:
+            raise ValueError("Invalid or expired connect code")
+        merchant_id = store_merchant_id
 
         if user_id is not None:
             cur.execute(
@@ -296,7 +341,12 @@ def redeem_connect_code(code: str, conn, *, expected_store_id: str | None = None
                 )
 
         if whatsapp_number is not None:
-            link_whatsapp_source_to_store(store_id, whatsapp_number, conn)
+            link_whatsapp_source_to_store(
+                store_id,
+                whatsapp_number,
+                conn,
+                commit=False,
+            )
 
         cur.execute(
             """UPDATE connect_codes

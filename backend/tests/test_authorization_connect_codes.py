@@ -7,6 +7,7 @@ import pytest
 from psycopg import sql
 
 from scripts.init_db import init_database
+import services.onboarding as onboarding
 from services.authorization import get_user_merchants, require_merchant_access, require_store_access, get_user_role
 from services.onboarding import create_connect_code, create_dashboard_merchant, redeem_connect_code, link_whatsapp_source_to_store
 
@@ -115,10 +116,13 @@ def test_connect_code_redemption_is_atomic_and_single_use(auth_database):
 def test_connect_code_rejects_expired_code(auth_database):
     with auth_database() as conn:
         expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        created_at = expires_at - timedelta(hours=1)
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO connect_codes (code, store_id, merchant_id, used, expires_at) VALUES (%s, %s, %s, %s, %s)",
-                ("EXPIRED1", "ST001", "M001", False, expires_at),
+                """INSERT INTO connect_codes
+                       (code, store_id, merchant_id, used, expires_at, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                ("EXPIRED1", "ST001", "M001", False, expires_at, created_at),
             )
         conn.commit()
 
@@ -148,3 +152,20 @@ def test_dashboard_onboarding_creates_membership_and_code(auth_database):
                 ("user-9", data["merchant_id"]),
             )
             assert cur.fetchone() is not None
+
+
+def test_dashboard_onboarding_rolls_back_when_connect_code_creation_fails(auth_database, monkeypatch):
+    def fail_code_creation(*args, **kwargs):
+        raise RuntimeError("connect-code storage failed")
+
+    monkeypatch.setattr(onboarding, "create_connect_code", fail_code_creation)
+
+    with auth_database() as conn:
+        with pytest.raises(RuntimeError, match="connect-code storage failed"):
+            create_dashboard_merchant("user-10", "Rollback Merchant", conn)
+
+        row = conn.execute(
+            "SELECT 1 FROM merchants WHERE business_name = %s",
+            ("Rollback Merchant",),
+        ).fetchone()
+    assert row is None

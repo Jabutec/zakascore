@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from enum import Enum
 from typing import Annotated
 
@@ -48,8 +48,6 @@ class SourceType(str, Enum):
 
 
 class Merchant(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
     merchant_id: MerchantID
     business_name: str
     location: str | None = None
@@ -58,8 +56,6 @@ class Merchant(BaseModel):
 
 
 class MerchantUser(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
     user_id: str  # Neon Auth-issued UUID string
     merchant_id: MerchantID
     role: Role = Role.OWNER
@@ -67,8 +63,6 @@ class MerchantUser(BaseModel):
 
 
 class Store(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
     store_id: StoreID
     merchant_id: MerchantID
     store_name: str
@@ -77,10 +71,8 @@ class Store(BaseModel):
 
 
 class DataSource(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
     source_id: SourceID
-    store_id: StoreID | None = None
+    store_id: StoreID
     source_name: str
     source_type: SourceType
     external_identifier: str | None = None  # e.g. the WhatsApp number
@@ -88,10 +80,8 @@ class DataSource(BaseModel):
 
 
 class ConnectCode(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
     code: str
-    store_id: StoreID | None = None
+    store_id: StoreID
     merchant_id: MerchantID | None = None
     used: bool = False
     expires_at: datetime
@@ -99,11 +89,8 @@ class ConnectCode(BaseModel):
 
 
 class Transaction(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
     transaction_id: TransactionID
-    merchant_id: MerchantID | None = None
-    store_id: StoreID | None = None
+    store_id: StoreID
     source_id: SourceID
     offering_id: OfferingID | None = None
     quantity: int | None = None
@@ -137,11 +124,8 @@ class Offering(BaseModel):
 
 
 class FinancialSnapshot(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
     snapshot_id: SnapshotID
-    merchant_id: MerchantID | None = None
-    store_id: StoreID | None = None
+    store_id: StoreID
     period_start: date
     period_end: date
     total_revenue_zar: float = Field(ge=0)

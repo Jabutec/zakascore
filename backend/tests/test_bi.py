@@ -14,7 +14,7 @@ def create_transactions():
     return [
         Transaction(
             transaction_id="T001",
-            merchant_id="M001",
+            store_id="ST001",
             source_id="S001",
             input_type=None,
             amount_zar=100,
@@ -23,7 +23,7 @@ def create_transactions():
         ),
         Transaction(
             transaction_id="T002",
-            merchant_id="M001",
+            store_id="ST001",
             source_id="S001",
             input_type=None,
             amount_zar=50,
@@ -32,7 +32,7 @@ def create_transactions():
         ),
         Transaction(
             transaction_id="T003",
-            merchant_id="M001",
+            store_id="ST001",
             source_id="S001",
             input_type=None,
             amount_zar=200,
@@ -120,7 +120,7 @@ def test_revenue_volatility_for_constant_revenue():
     transactions = [
         Transaction(
             transaction_id="T001",
-            merchant_id="M001",
+            store_id="ST001",
             source_id="S001",
             input_type=None,
             amount_zar=100,
@@ -129,7 +129,7 @@ def test_revenue_volatility_for_constant_revenue():
         ),
         Transaction(
             transaction_id="T002",
-            merchant_id="M001",
+            store_id="ST001",
             source_id="S001",
             input_type=None,
             amount_zar=100,
@@ -144,7 +144,7 @@ def test_revenue_volatility_insufficient_data():
     transactions = [
         Transaction(
             transaction_id="T001",
-            merchant_id="M001",
+            store_id="ST001",
             source_id="S001",
             input_type=None,
             amount_zar=100,

@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Header, HTTPException, Depends
+from pydantic import BaseModel, Field
 from services.auth import verify_access_token
 from services.authorization import get_user_merchants
+from services.onboarding import create_dashboard_merchant, redeem_connect_code
 from bi.visualization import prepare_revenue_data, prepare_top_offerings_data
 from bi.overview import get_business_overview
 from bi.visualization import prepare_payment_method_data
@@ -14,7 +16,7 @@ def get_db():
     return get_connection()
 
 
-def get_current_merchant_id(authorization: str = Header(...)) -> str:
+def get_current_user_id(authorization: str = Header(...)) -> str:
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization header")
 
@@ -24,20 +26,61 @@ def get_current_merchant_id(authorization: str = Header(...)) -> str:
     if user_id is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
+    return user_id
+
+
+def get_current_merchant_id(authorization: str = Header(...)) -> str:
+    user_id = get_current_user_id(authorization)
     conn = get_db()
     try:
         merchants = get_user_merchants(user_id, conn)
         if merchants:
             return merchants[0]["merchant_id"]
-
-        with conn.cursor() as cursor:
-            cursor.execute("SELECT merchant_id FROM merchants WHERE merchant_id = %s", (user_id,))
-            row = cursor.fetchone()
-
-        if row is not None:
-            return row[0]
-
         raise HTTPException(status_code=403, detail="User does not belong to any merchant")
+    finally:
+        conn.close()
+
+
+class ConnectCodeRedemption(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+
+
+class DashboardOnboardingRequest(BaseModel):
+    business_name: str = Field(min_length=1, max_length=160)
+    store_name: str | None = Field(default=None, min_length=1, max_length=160)
+
+
+@router.post("/api/onboarding/dashboard", status_code=201)
+async def create_dashboard_onboarding(
+    request: DashboardOnboardingRequest,
+    user_id: str = Depends(get_current_user_id),
+):
+    conn = get_db()
+    try:
+        return create_dashboard_merchant(
+            user_id,
+            request.business_name.strip(),
+            conn,
+            store_name=request.store_name.strip() if request.store_name else None,
+        )
+    finally:
+        conn.close()
+
+
+@router.post("/api/connect-codes/redeem")
+async def redeem_dashboard_connect_code(
+    request: ConnectCodeRedemption,
+    user_id: str = Depends(get_current_user_id),
+):
+    conn = get_db()
+    try:
+        redeemed = redeem_connect_code(request.code.strip().upper(), conn, user_id=user_id)
+        return {
+            "store_id": redeemed.store_id,
+            "merchant_id": redeemed.merchant_id,
+        }
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail="Invalid or expired connect code") from error
     finally:
         conn.close()
 

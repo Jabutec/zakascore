@@ -7,7 +7,12 @@ from dotenv import load_dotenv
 import os
 from database.connection import get_db as get_connection
 
-from services.onboarding import get_merchant_by_number, create_merchant, generate_next_transaction_id
+from services.onboarding import (
+    create_whatsapp_merchant,
+    generate_next_transaction_id,
+    get_merchant_by_number,
+    redeem_whatsapp_connect_code,
+)
 from services.parser import extract_transaction_details
 from services.offerings import get_or_create_offering
 from services.transcription import transcribe_audio
@@ -52,14 +57,36 @@ async def whatsapp_webhook(
     if merchant is None:
         if Body.lower().startswith("register:"):
             business_name = Body.split(":", 1)[1].strip()
-            create_merchant(whatsapp_number, business_name, conn)
-            reply = "Registered! Now send your sale amounts anytime, e.g. 300"
+            onboarding = create_whatsapp_merchant(
+                whatsapp_number,
+                business_name,
+                conn,
+            )
+            reply = (
+                "Registered! Your dashboard connect code is "
+                f"{onboarding['connect_code']}. Enter it after creating your account. "
+                "You can now send your sale amounts anytime, e.g. 300"
+            )
         else:
-            reply = "Welcome to ZakaScore. To get started, send: register: Your Business Name"
+            try:
+                redeem_whatsapp_connect_code(
+                    Body.strip().upper(),
+                    whatsapp_number,
+                    conn,
+                )
+            except ValueError:
+                reply = "Welcome to ZakaScore. To get started, send: register: Your Business Name"
+            else:
+                reply = "Connected! Now send your sale amounts anytime, e.g. 300"
         conn.close()
         return PlainTextResponse(reply)
 
-    if has_reached_limit(merchant.merchant_id, merchant.tier, merchant.created_at, conn):
+    if has_reached_limit(
+        merchant.merchant.merchant_id,
+        merchant.merchant.tier,
+        merchant.merchant.created_at,
+        conn,
+    ):
         conn.close()
         return PlainTextResponse("Transaction not recorded — you've reached your daily limit.")
 
@@ -86,7 +113,7 @@ async def whatsapp_webhook(
 
     transaction = Transaction(
         transaction_id=generate_next_transaction_id(conn),
-        merchant_id=merchant.merchant_id,
+        store_id=merchant.store_id,
         source_id=merchant.source_id,
         input_type=InputType.WHATSAPP,
         amount_zar=amount,
