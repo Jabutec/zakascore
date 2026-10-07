@@ -9,12 +9,12 @@ ZakaScore uses a Next.js frontend, a FastAPI backend, and PostgreSQL hosted on N
 | Layer           | Technology                   | Responsibility                            |
 | --------------- | ---------------------------- | ----------------------------------------- |
 | Frontend        | Next.js, React, Tailwind CSS | Dashboard and user interface              |
-| Backend         | FastAPI, Python              | API, validation, business logic, webhooks |
+| Backend         | FastAPI, Python              | API, validation, business logic           |
 | Database        | PostgreSQL, Neon             | Persistent application data               |
 | Database Driver | Psycopg 3                    | Backend-to-database connection            |
 | Testing         | Pytest                       | Automated backend testing                 |
 | CI              | GitHub Actions               | Automated test execution                  |
-| Ingestion       | Twilio / WhatsApp            | Business data input                       |
+| Ingestion       | Authenticated PWA API        | Business data input                       |
 
 The frontend communicates with FastAPI through HTTP/JSON. The backend is responsible for communicating with PostgreSQL.
 
@@ -25,7 +25,7 @@ The FastAPI backend is responsible for:
 - API endpoints
 - Request validation
 - Data ingestion
-- WhatsApp webhook processing
+- Authenticated PWA transaction logging
 - Business intelligence calculations
 - Financial metrics
 - Credit scoring
@@ -55,9 +55,9 @@ A merchant can have multiple users and stores. A store can have multiple data so
 
 `merchant_users` handles the relationship between application users and merchants.
 
-`data_sources` identifies where business data originated, such as WhatsApp, POS systems, CSV files, or online stores.
-
-WhatsApp numbers are stored as source identifiers rather than as merchant identity.
+`data_sources` identifies where business data originated, such as the PWA, POS systems,
+CSV files, or online stores. Each store created through dashboard onboarding receives a
+PWA source.
 
 ## Data Sources
 
@@ -69,11 +69,12 @@ ZakaScore is designed to support multiple sources of business data.
 | `bank_statement`      | Bank transaction data      |
 | `accounting_software` | Accounting platform        |
 | `online_store`        | E-commerce platform        |
-| `whatsapp`            | WhatsApp business activity |
+| `pwa`                  | Dashboard/PWA sale logging |
 | `csv`                 | Imported business data     |
 | `manual`              | Manually entered data      |
 
-This allows WhatsApp to function as one ingestion channel without making it the foundation of the entire system.
+The PWA records sales through an authenticated API; the server resolves the store's
+source rather than accepting a source identifier from the client.
 
 ## Transactions
 
@@ -84,6 +85,7 @@ A transaction can contain:
 | Field              | Purpose                                      |
 | ------------------ | -------------------------------------------- |
 | `transaction_id`   | Unique transaction identifier                |
+| `client_txn_id`    | Client-generated idempotency key per sale    |
 | `store_id`         | Store associated with the transaction        |
 | `source_id`        | Data source that produced the transaction    |
 | `offering_id`      | Product or service involved                  |
@@ -91,7 +93,6 @@ A transaction can contain:
 | `amount_zar`       | Transaction value                            |
 | `payment_method`   | Cash or digital                              |
 | `input_type`       | How the transaction entered the system       |
-| `raw_message`      | Original input where applicable              |
 | `transaction_date` | Date and time of the transaction             |
 | `is_voided`        | Indicates whether the transaction was voided |
 
@@ -104,6 +105,7 @@ The dashboard currently exposes:
 | Endpoint                   | Purpose                  |
 | -------------------------- | ------------------------ |
 | `GET /api/transactions`    | Recent transactions      |
+| `POST /transactions`       | Log a PWA transaction    |
 | `GET /api/revenue`         | Revenue data             |
 | `GET /api/top-offerings`   | Top-performing offerings |
 | `GET /api/overview`        | Business overview        |
@@ -120,19 +122,13 @@ The scoring system uses structured financial information rather than relying onl
 
 The scoring logic is kept in the backend and is independent of the frontend.
 
-## WhatsApp Integration
+## PWA Transaction Logging
 
-WhatsApp is intended to provide a simple way for SMEs to record business activity.
-
-The intended flow is:
-
-1. A merchant sends business activity through WhatsApp.
-2. Twilio forwards the message to the FastAPI webhook.
-3. The backend processes and validates the input.
-4. The transaction is stored in PostgreSQL.
-5. Business intelligence and scoring can use the resulting transaction.
-
-A WhatsApp number is associated with a `data_sources` record and linked to a store. It is not treated as the merchant's identity.
+The authenticated `POST /transactions` endpoint accepts a store, client-generated
+idempotency key, amount, payment method, and optional offering, quantity, and transaction
+date. The backend checks employee-level store access, resolves the store's PWA source,
+validates the transaction, and inserts it once per `(store_id, client_txn_id)`. Repeated
+requests with the same key return the original transaction.
 
 ## Authentication
 
@@ -219,7 +215,7 @@ The current development path is:
 
 1. PostgreSQL migration
 2. Frontend and API integration
-3. WhatsApp integration
+3. PWA transaction logging
 4. End-to-end testing
 5. Authentication integration
 6. Production deployment

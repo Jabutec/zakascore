@@ -91,11 +91,11 @@ export default function ConnectPage() {
             <h2 className="font-medium text-gray-900">Create a business profile</h2>
             <label className="block text-sm text-gray-700">
               Business name
-              <input value={businessName} onChange={(event) => setBusinessName(event.target.value)} required maxLength={160} className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2.5" />
+              <input value={businessName} onChange={(event) => setBusinessName(event.target.value)} required maxLength={100} className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2.5" />
             </label>
             <label className="block text-sm text-gray-700">
               Store name (optional)
-              <input value={storeName} onChange={(event) => setStoreName(event.target.value)} maxLength={160} className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2.5" />
+              <input value={storeName} onChange={(event) => setStoreName(event.target.value)} maxLength={100} className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2.5" />
             </label>
             <button type="submit" disabled={loading} className="w-full rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-gray-700 disabled:opacity-50">
               {loading ? "Creating..." : "Create and get WhatsApp code"}

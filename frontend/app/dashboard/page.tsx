@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { getAuth } from "@/lib/auth/server";
-import { createBackendAccessToken } from "@/lib/backend-token";
 import DashboardView, {
   type CreditScore,
   type DashboardOverview,
@@ -38,16 +37,18 @@ export default async function DashboardPage() {
   if (error) {
     throw new Error("Unable to verify your sign-in session");
   }
-  if (!session?.user?.id) {
+  if (!session?.user?.id || !session.session?.token) {
     redirect("/login");
   }
 
-  const apiUrl = (process.env.BACKEND_API_URL ?? process.env.NEXT_PUBLIC_API_URL)?.replace(/\/+$/, "");
+  const apiUrl = (
+    process.env.BACKEND_API_URL ?? process.env.NEXT_PUBLIC_API_URL
+  )?.replace(/\/+$/, "");
   if (!apiUrl) {
     throw new Error("Dashboard API is not configured");
   }
-  const token = await createBackendAccessToken(session.user.id);
 
+  const token = session.session.token;
   const [transactions, revenue, topOfferings, overview, paymentMethods, creditScore] =
     await Promise.all([
       getData<Transaction[]>(apiUrl, "/api/transactions", token),

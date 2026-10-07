@@ -1,391 +1,274 @@
-import secrets
+"""Dashboard merchant, store and PWA-source onboarding."""
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from dataclasses import dataclass
+import secrets
+from uuid import UUID
 
-from validation.models import Merchant, DataSource, Tier, SourceType, ConnectCode
+from services.authorization import require_merchant_access
+from validation.models import Tier
+
+MAX_BUSINESS_NAME_CHARS = 100
+CONNECT_CODE_TTL_HOURS = 24
+CONNECT_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 
-@dataclass
-class MerchantContext:
-    merchant: Merchant
-    store_id: str
-    source_id: str
+@contextmanager
+def _atomic(conn):
+    try:
+        yield
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
-def get_merchant_by_number(whatsapp_number: str, conn) -> MerchantContext | None:
-    with conn.cursor() as cur:
-        cur.execute(
-            """SELECT m.merchant_id, m.business_name, m.location, m.tier, m.created_at,
-                      s.store_id, ds.source_id
-               FROM data_sources ds
-               JOIN stores s ON s.store_id = ds.store_id
-               JOIN merchants m ON m.merchant_id = s.merchant_id
-               WHERE ds.source_type = 'whatsapp'
-                 AND ds.external_identifier = %s""",
-            (whatsapp_number,),
-        )
-        row = cur.fetchone()
+def _as_uuid(value) -> UUID:
+    return value if isinstance(value, UUID) else UUID(str(value))
 
-    if row is None:
-        return None
 
-    merchant = Merchant(
-        merchant_id=row[0],
-        business_name=row[1],
-        location=row[2],
-        tier=row[3],
-        created_at=row[4],
+def _clean_business_name(name: str) -> str:
+    cleaned = " ".join((name or "").split())
+    if not cleaned or len(cleaned) > MAX_BUSINESS_NAME_CHARS:
+        raise ValueError(f"Business name must be 1 to {MAX_BUSINESS_NAME_CHARS} characters")
+    return cleaned
+
+
+def _insert_pwa_source(cur, store_id) -> UUID:
+    cur.execute(
+        """INSERT INTO data_sources (store_id, source_name, source_type)
+           VALUES (%s, 'PWA', 'pwa') RETURNING source_id""",
+        (store_id,),
     )
+    return cur.fetchone()[0]
 
-    return MerchantContext(merchant=merchant, store_id=row[5], source_id=row[6])
 
-
-def generate_next_transaction_id(conn) -> str:
-    with conn.cursor() as cur:
+def _create_connect_code(cur, store_id, *, expires_in_hours: int = CONNECT_CODE_TTL_HOURS) -> str:
+    if expires_in_hours < 1 or expires_in_hours > 168:
+        raise ValueError("Connect-code expiry must be between 1 and 168 hours")
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
+    while True:
+        code = "".join(secrets.choice(CONNECT_CODE_ALPHABET) for _ in range(8))
         cur.execute(
-            "SELECT transaction_id FROM transactions ORDER BY transaction_id DESC LIMIT 1"
+            """INSERT INTO connect_codes (code, store_id, expires_at)
+               VALUES (%s, %s, %s)
+               ON CONFLICT (code) DO NOTHING
+               RETURNING code""",
+            (code, store_id, expires_at),
         )
         row = cur.fetchone()
+        if row is not None:
+            return row[0]
 
+
+def issue_connect_code(
+    store_id, conn, *, expires_in_hours: int = CONNECT_CODE_TTL_HOURS
+) -> str:
+    store = _as_uuid(store_id)
+    with _atomic(conn), conn.cursor() as cur:
+        cur.execute(
+            """SELECT store_id FROM stores
+               WHERE store_id = %s
+               FOR UPDATE""",
+            (store,),
+        )
+        if cur.fetchone() is None:
+            raise ValueError("Store does not exist")
+        return _create_connect_code(
+            cur, store, expires_in_hours=expires_in_hours
+        )
+
+
+def create_dashboard_merchant(
+    user_id,
+    business_name: str,
+    conn,
+    *,
+    store_name: str | None = None,
+    code_ttl_hours: int = CONNECT_CODE_TTL_HOURS,
+) -> dict:
+    user = _as_uuid(user_id)
+    name = _clean_business_name(business_name)
+    store = _clean_business_name(store_name) if store_name else name
+
+    with _atomic(conn), conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO merchants (business_name, tier)
+               VALUES (%s, %s) RETURNING merchant_id""",
+            (name, Tier.INSIGHTS.value),
+        )
+        merchant_id = cur.fetchone()[0]
+
+        cur.execute(
+            "INSERT INTO merchant_users (user_id, merchant_id, role) VALUES (%s, %s, 'owner')",
+            (user, merchant_id),
+        )
+
+        cur.execute(
+            """INSERT INTO stores (merchant_id, store_name)
+               VALUES (%s, %s) RETURNING store_id""",
+            (merchant_id, store),
+        )
+        store_id = cur.fetchone()[0]
+        source_id = _insert_pwa_source(cur, store_id)
+        connect_code = _create_connect_code(
+            cur, store_id, expires_in_hours=code_ttl_hours
+        )
+
+    return {
+        "merchant_id": merchant_id,
+        "store_id": store_id,
+        "source_id": source_id,
+        "connect_code": connect_code,
+    }
+
+
+def _lock_valid_connect_code(cur, code: str):
+    cur.execute(
+        """SELECT cc.store_id, s.merchant_id
+           FROM connect_codes cc
+           JOIN stores s ON s.store_id = cc.store_id
+           JOIN merchants m ON m.merchant_id = s.merchant_id
+           WHERE cc.code = %s
+             AND cc.used_at IS NULL
+             AND cc.expires_at > now()
+           FOR UPDATE OF cc""",
+        (code.strip().upper(),),
+    )
+    row = cur.fetchone()
     if row is None:
-        return "T001"
-
-    last_number = int(row[0][1:])
-    return f"T{last_number + 1:03d}"
+        raise ValueError("Invalid or expired connect code")
+    return row
 
 
-def generate_next_merchant_id(conn) -> str:
-    with conn.cursor() as cur:
+def redeem_connect_code_for_user(code: str, user_id, conn) -> dict:
+    user = _as_uuid(user_id)
+    with _atomic(conn), conn.cursor() as cur:
+        store_id, merchant_id = _lock_valid_connect_code(cur, code)
         cur.execute(
-            """SELECT COALESCE(MAX(substring(merchant_id FROM 2)::INTEGER), 0)
-               FROM merchants WHERE merchant_id ~ '^M[0-9]+$'"""
+            """INSERT INTO merchant_users (user_id, merchant_id, role)
+               VALUES (%s, %s, 'owner')
+               ON CONFLICT (user_id, merchant_id) DO NOTHING""",
+            (user, merchant_id),
         )
-        return f"M{cur.fetchone()[0] + 1:03d}"
-
-
-def generate_next_store_id(conn) -> str:
-    with conn.cursor() as cur:
         cur.execute(
-            "SELECT COALESCE(MAX(substring(store_id FROM 3)::INTEGER), 0) "
-            "FROM stores WHERE store_id ~ '^ST[0-9]+$'"
+            "UPDATE connect_codes SET used_at = now() WHERE code = %s",
+            (code.strip().upper(),),
         )
-        return f"ST{cur.fetchone()[0] + 1:03d}"
+    return {"store_id": store_id, "merchant_id": merchant_id}
 
 
-def generate_next_source_id(conn) -> str:
-    with conn.cursor() as cur:
+def _normalize_whatsapp_number(whatsapp_number: str) -> str:
+    normalized = (whatsapp_number or "").strip()
+    if normalized.lower().startswith("whatsapp:"):
+        normalized = normalized[len("whatsapp:"):].strip()
+    if not normalized or len(normalized) > 64:
+        raise ValueError("Invalid WhatsApp number")
+    return normalized
+
+
+def redeem_connect_code_for_whatsapp(code: str, whatsapp_number: str, conn) -> dict:
+    number = _normalize_whatsapp_number(whatsapp_number)
+    with _atomic(conn), conn.cursor() as cur:
+        store_id, merchant_id = _lock_valid_connect_code(cur, code)
         cur.execute(
-            """SELECT COALESCE(MAX(substring(source_id FROM 2)::INTEGER), 0)
-               FROM data_sources WHERE source_id ~ '^S[0-9]+$'"""
+            """SELECT source_id, store_id
+               FROM data_sources
+               WHERE source_type = 'whatsapp' AND external_identifier = %s""",
+            (number,),
         )
-        return f"S{cur.fetchone()[0] + 1:03d}"
+        existing = cur.fetchone()
+        if existing is not None and existing[1] != store_id:
+            raise ValueError("WhatsApp number is already connected")
+        if existing is None:
+            cur.execute(
+                """INSERT INTO data_sources
+                       (store_id, source_name, source_type, external_identifier)
+                   VALUES (%s, 'WhatsApp', 'whatsapp', %s)
+                   RETURNING source_id""",
+                (store_id, number),
+            )
+            source_id = cur.fetchone()[0]
+        else:
+            source_id = existing[0]
+        cur.execute(
+            "UPDATE connect_codes SET used_at = now() WHERE code = %s",
+            (code.strip().upper(),),
+        )
+    return {
+        "store_id": store_id,
+        "merchant_id": merchant_id,
+        "source_id": source_id,
+    }
 
 
-def create_merchant(
+def create_whatsapp_merchant(
     whatsapp_number: str,
     business_name: str,
     conn,
     *,
-    commit: bool = True,
-) -> MerchantContext:
-    merchant_id = generate_next_merchant_id(conn)
-    store_id = generate_next_store_id(conn)
-    source_id = generate_next_source_id(conn)
-
-    merchant = Merchant(
-        merchant_id=merchant_id,
-        business_name=business_name,
-        location=None,
-        tier=Tier.INSIGHTS,
-    )
-
-    with conn.cursor() as cur:
+    store_name: str | None = None,
+    code_ttl_hours: int = CONNECT_CODE_TTL_HOURS,
+) -> dict:
+    number = _normalize_whatsapp_number(whatsapp_number)
+    name = _clean_business_name(business_name)
+    store = _clean_business_name(store_name) if store_name else name
+    with _atomic(conn), conn.cursor() as cur:
         cur.execute(
-            """INSERT INTO merchants (merchant_id, business_name, location, tier)
-               VALUES (%s, %s, %s, %s)""",
-            (merchant.merchant_id, merchant.business_name, merchant.location, merchant.tier.value),
+            """INSERT INTO merchants (business_name, tier)
+               VALUES (%s, %s) RETURNING merchant_id""",
+            (name, Tier.INSIGHTS.value),
         )
+        merchant_id = cur.fetchone()[0]
         cur.execute(
-            """INSERT INTO stores (store_id, merchant_id, store_name, location)
-               VALUES (%s, %s, %s, %s)""",
-            (store_id, merchant_id, business_name, None),
+            """INSERT INTO stores (merchant_id, store_name)
+               VALUES (%s, %s) RETURNING store_id""",
+            (merchant_id, store),
         )
+        store_id = cur.fetchone()[0]
         cur.execute(
             """INSERT INTO data_sources
-                   (source_id, store_id, source_name, source_type, external_identifier)
-               VALUES (%s, %s, %s, %s, %s)""",
-            (source_id, store_id, "WhatsApp", SourceType.WHATSAPP.value, whatsapp_number),
+                   (store_id, source_name, source_type, external_identifier)
+               VALUES (%s, 'WhatsApp', 'whatsapp', %s)
+               RETURNING source_id""",
+            (store_id, number),
         )
-    if commit:
-        conn.commit()
-
-    return MerchantContext(merchant=merchant, store_id=store_id, source_id=source_id)
-
-
-def create_dashboard_merchant(user_id: str, business_name: str, conn, *, store_name: str | None = None, code_ttl_hours: int = 24):
-    target_store_name = store_name or business_name
-
-    merchant_id = None
-    store_id = None
-    with conn.transaction():
-        merchant_id = generate_next_merchant_id(conn)
-        store_id = generate_next_store_id(conn)
-        with conn.cursor() as cur:
-            cur.execute(
-                """INSERT INTO merchants (merchant_id, business_name, location, tier)
-                   VALUES (%s, %s, %s, %s)""",
-                (merchant_id, business_name, None, Tier.INSIGHTS.value),
-            )
-            cur.execute(
-                """INSERT INTO stores (store_id, merchant_id, store_name, location)
-                   VALUES (%s, %s, %s, %s)""",
-                (store_id, merchant_id, target_store_name, None),
-            )
-            cur.execute(
-                """INSERT INTO merchant_users (user_id, merchant_id, role)
-                   VALUES (%s, %s, %s)""",
-                (user_id, merchant_id, "owner"),
-            )
-        code = create_connect_code(
-            store_id,
-            merchant_id=merchant_id,
-            conn=conn,
-            expires_in_hours=code_ttl_hours,
-            commit=False,
+        source_id = cur.fetchone()[0]
+        connect_code = _create_connect_code(
+            cur, store_id, expires_in_hours=code_ttl_hours
         )
-    conn.commit()
-    return {"merchant_id": merchant_id, "store_id": store_id, "connect_code": code.code}
-
-
-def create_whatsapp_merchant(whatsapp_number: str, business_name: str, conn, *, code_ttl_hours: int = 24):
-    with conn.transaction():
-        merchant_context = create_merchant(
-            whatsapp_number,
-            business_name,
-            conn,
-            commit=False,
-        )
-        code = create_connect_code(
-            merchant_context.store_id,
-            merchant_id=merchant_context.merchant.merchant_id,
-            conn=conn,
-            expires_in_hours=code_ttl_hours,
-            commit=False,
-        )
-    conn.commit()
     return {
-        "merchant_id": merchant_context.merchant.merchant_id,
-        "store_id": merchant_context.store_id,
-        "source_id": merchant_context.source_id,
-        "connect_code": code.code,
+        "merchant_id": merchant_id,
+        "store_id": store_id,
+        "source_id": source_id,
+        "connect_code": connect_code,
     }
 
 
-def link_whatsapp_source_to_store(
-    store_id: str,
-    whatsapp_number: str,
-    conn,
-    *,
-    commit: bool = True,
-) -> str:
-    normalized = whatsapp_number.replace("whatsapp:", "")
-    with conn.cursor() as cur:
+def add_store(user_id, merchant_id, store_name: str, conn) -> dict:
+    user = _as_uuid(user_id)
+    merchant = _as_uuid(merchant_id)
+    name = _clean_business_name(store_name)
+    require_merchant_access(user, merchant, conn, min_role="admin")
+
+    with _atomic(conn), conn.cursor() as cur:
         cur.execute(
-            """
-            SELECT source_id
-            FROM data_sources
-            WHERE source_type = 'whatsapp'
-              AND external_identifier = %s
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-            (normalized,),
+            """INSERT INTO stores (merchant_id, store_name)
+               VALUES (%s, %s) RETURNING store_id""",
+            (merchant, name),
         )
-        existing = cur.fetchone()
-        if existing is not None:
-            if existing[0] is not None:
-                cur.execute(
-                    "SELECT store_id FROM data_sources WHERE source_id = %s",
-                    (existing[0],),
-                )
-                linked_store = cur.fetchone()
-                if linked_store is not None and linked_store[0] != store_id:
-                    raise ValueError("WhatsApp number is already connected to another store")
-                return existing[0]
+        store_id = cur.fetchone()[0]
+        source_id = _insert_pwa_source(cur, store_id)
 
-        cur.execute(
-            """
-            SELECT source_id
-            FROM data_sources
-            WHERE store_id = %s AND source_type = 'whatsapp' AND external_identifier = %s
-            """,
-            (store_id, normalized),
-        )
-        existing_store = cur.fetchone()
-        if existing_store is not None:
-            return existing_store[0]
-
-        source_id = generate_next_source_id(conn)
-        cur.execute(
-            """
-            INSERT INTO data_sources (source_id, store_id, source_name, source_type, external_identifier)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
-            (source_id, store_id, "WhatsApp", SourceType.WHATSAPP.value, normalized),
-        )
-    if commit:
-        conn.commit()
-    return source_id
+    return {"store_id": store_id, "source_id": source_id}
 
 
-def generate_connect_code(*args, conn=None, code_length: int = 8):
-    if conn is None:
-        if args and hasattr(args[0], "cursor"):
-            conn = args[0]
-            args = args[1:]
-        else:
-            raise ValueError("A database connection is required to generate a connect code")
-
-    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    while True:
-        code = "".join(secrets.choice(alphabet) for _ in range(code_length))
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM connect_codes WHERE code = %s", (code,))
-            if cur.fetchone() is None:
-                return code
-
-
-def create_connect_code(
-    store_id: str | None = None,
-    *,
-    conn=None,
-    merchant_id: str | None = None,
-    expires_in_hours: int = 24,
-    code_length: int = 8,
-    commit: bool = True,
-) -> ConnectCode:
-    if conn is None:
-        raise ValueError("A database connection is required to create a connect code")
-
-    code = generate_connect_code(conn=conn, code_length=code_length)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_in_hours)
-
-    with conn.cursor() as cur:
-        if store_id is None:
-            raise ValueError("A store_id is required to create a connect code")
-        cur.execute(
-            """INSERT INTO connect_codes (code, store_id, merchant_id, used, expires_at)
-               VALUES (%s, %s, %s, %s, %s)""",
-            (code, store_id, merchant_id, False, expires_at),
-        )
-    if commit:
-        conn.commit()
-
-    return ConnectCode(code=code, store_id=store_id, merchant_id=merchant_id, used=False, expires_at=expires_at)
-
-
-def redeem_connect_code(code: str, conn, *, expected_store_id: str | None = None, expected_merchant_id: str | None = None, user_id: str | None = None, whatsapp_number: str | None = None) -> ConnectCode:
-    if conn is None:
-        raise ValueError("A database connection is required to redeem a connect code")
-
-    now = datetime.now(timezone.utc)
-    with conn.cursor() as cur:
-        cur.execute(
-            """SELECT code, store_id, merchant_id, used, expires_at
-               FROM connect_codes
-               WHERE code = %s
-               FOR UPDATE""",
-            (code,),
-        )
-        row = cur.fetchone()
-
-        if row is None:
-            raise ValueError("Invalid or expired connect code")
-
-        stored_code, store_id, merchant_id, used, expires_at = row
-        if used or expires_at <= now:
-            raise ValueError("Invalid or expired connect code")
-        if expected_store_id is not None and store_id != expected_store_id:
-            raise ValueError("Invalid or expired connect code")
-        if expected_merchant_id is not None and merchant_id is not None and merchant_id != expected_merchant_id:
-            raise ValueError("Invalid or expired connect code")
-
-        if store_id is None:
-            raise ValueError("Invalid or expired connect code")
-
-        cur.execute(
-            """SELECT s.merchant_id
-               FROM stores s
-               JOIN merchants m ON m.merchant_id = s.merchant_id
-               WHERE s.store_id = %s""",
-            (store_id,),
-        )
-        store = cur.fetchone()
-        if store is None:
-            raise ValueError("Invalid or expired connect code")
-        store_merchant_id = store[0]
-        if merchant_id is not None and merchant_id != store_merchant_id:
-            raise ValueError("Invalid or expired connect code")
-        merchant_id = store_merchant_id
-
-        if user_id is not None:
-            cur.execute(
-                """SELECT 1 FROM merchant_users WHERE user_id = %s AND merchant_id = %s""",
-                (user_id, merchant_id),
-            )
-            if cur.fetchone() is None:
-                cur.execute(
-                    """INSERT INTO merchant_users (user_id, merchant_id, role)
-                       VALUES (%s, %s, %s)""",
-                    (user_id, merchant_id, "owner"),
-                )
-
-        if whatsapp_number is not None:
-            link_whatsapp_source_to_store(
-                store_id,
-                whatsapp_number,
-                conn,
-                commit=False,
-            )
-
-        cur.execute(
-            """UPDATE connect_codes
-               SET used = TRUE
-               WHERE code = %s AND used = FALSE""",
-            (stored_code,),
-        )
-        if cur.rowcount != 1:
-            raise ValueError("Invalid or expired connect code")
-
-    conn.commit()
-    return ConnectCode(code=stored_code, store_id=store_id, merchant_id=merchant_id, used=True, expires_at=expires_at)
-
-
-def redeem_dashboard_connect_code(code: str, user_id: str, conn, *, expected_store_id: str | None = None) -> ConnectCode:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT merchant_id, store_id FROM connect_codes WHERE code = %s",
-            (code,),
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise ValueError("Invalid or expired connect code")
-        merchant_id, store_id = row
-        if expected_store_id is not None and store_id != expected_store_id:
-            raise ValueError("Invalid or expired connect code")
-    return redeem_connect_code(code, conn, user_id=user_id, expected_store_id=expected_store_id, expected_merchant_id=merchant_id)
-
-
-def redeem_whatsapp_connect_code(code: str, whatsapp_number: str, conn, *, expected_store_id: str | None = None) -> ConnectCode:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT merchant_id, store_id FROM connect_codes WHERE code = %s",
-            (code,),
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise ValueError("Invalid or expired connect code")
-        merchant_id, store_id = row
-        if expected_store_id is not None and store_id != expected_store_id:
-            raise ValueError("Invalid or expired connect code")
-    return redeem_connect_code(code, conn, whatsapp_number=whatsapp_number, expected_store_id=expected_store_id, expected_merchant_id=merchant_id)
+def get_pwa_source_id(store_id, conn) -> UUID:
+    store = _as_uuid(store_id)
+    row = conn.execute(
+        """SELECT source_id FROM data_sources
+           WHERE store_id = %s AND source_type = 'pwa' AND is_active""",
+        (store,),
+    ).fetchone()
+    if row is None:
+        raise LookupError(f"No active PWA source is configured for store {store}")
+    return row[0]

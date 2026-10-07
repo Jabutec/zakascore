@@ -21,10 +21,12 @@ from bi.indicators import (
 )
 from bi.insights import generate_business_insights
 
+SAST = ZoneInfo("Africa/Johannesburg")
+
 SimpleTransaction = namedtuple("SimpleTransaction", ["amount_zar", "transaction_date", "payment_method"])
 
 
-def get_transactions_for_merchant(merchant_id: str, conn) -> list[SimpleTransaction]:
+def get_transactions_for_merchant(merchant_id, conn) -> list[SimpleTransaction]:
     cursor = conn.execute(
         """SELECT amount_zar, transaction_date, payment_method
            FROM transactions t
@@ -39,13 +41,14 @@ def get_transactions_for_merchant(merchant_id: str, conn) -> list[SimpleTransact
     for amount, date_str, payment_method in rows:
         date_obj = date_str if isinstance(date_str, datetime) else datetime.fromisoformat(date_str)
         if date_obj.tzinfo is not None:
-            date_obj = date_obj.astimezone(ZoneInfo("Africa/Johannesburg")).replace(tzinfo=None)
+            # Naive SAST wall-clock time, so day buckets match the dashboard.
+            date_obj = date_obj.astimezone(SAST).replace(tzinfo=None)
         result.append(SimpleTransaction(float(amount), date_obj, payment_method))
 
     return result
 
 
-def get_business_overview(merchant_id: str, conn) -> dict:
+def get_business_overview(merchant_id, conn) -> dict:
     transactions = get_transactions_for_merchant(merchant_id, conn)
 
     total_revenue = calculate_total_revenue(transactions)
@@ -53,7 +56,8 @@ def get_business_overview(merchant_id: str, conn) -> dict:
     average_transaction = calculate_average_transaction(transactions)
     daily_revenue = calculate_revenue_by_date(transactions)
 
-    now = datetime.now()
+    # Transactions are naive SAST, so "now" must be too (the server may run UTC).
+    now = datetime.now(SAST).replace(tzinfo=None)
     thirty_days_ago = now - timedelta(days=30)
     sixty_days_ago = now - timedelta(days=60)
 
@@ -62,12 +66,23 @@ def get_business_overview(merchant_id: str, conn) -> dict:
 
     current_revenue = calculate_total_revenue(current_period_txns)
     previous_revenue = calculate_total_revenue(previous_period_txns)
-    revenue_growth = calculate_revenue_growth(current_revenue, previous_revenue)
 
-    revenue_volatility_raw = calculate_revenue_volatility(transactions)
+    # Growth is only meaningful if the merchant was trading for the whole previous
+    # window. Otherwise a new merchant's partial window makes growth look huge.
+    # (transactions are ordered oldest first)
+    has_full_prior_window = bool(transactions) and transactions[0].transaction_date <= sixty_days_ago
+    revenue_growth = (
+        calculate_revenue_growth(current_revenue, previous_revenue)
+        if has_full_prior_window
+        else None
+    )
+
+    revenue_volatility_raw = calculate_revenue_volatility(transactions)  # None if too little data
     average_daily_revenue = statistics.mean(daily_revenue.values()) if daily_revenue else 0
     coefficient_of_variation = (
-        revenue_volatility_raw / average_daily_revenue if average_daily_revenue > 0 else None
+        revenue_volatility_raw / average_daily_revenue
+        if revenue_volatility_raw is not None and average_daily_revenue > 0
+        else None
     )
 
     active_days = len(daily_revenue)
@@ -75,12 +90,16 @@ def get_business_overview(merchant_id: str, conn) -> dict:
 
     cash_revenue = sum(t.amount_zar for t in transactions if t.payment_method == "cash")
     digital_revenue = sum(t.amount_zar for t in transactions if t.payment_method == "digital")
+    known_payment_revenue = cash_revenue + digital_revenue
+    payment_method_coverage_pct = (
+        round(known_payment_revenue / total_revenue * 100, 2) if total_revenue > 0 else None
+    )
 
     revenue_trend = determine_revenue_trend(revenue_growth)
     transaction_activity = calculate_transaction_activity(transaction_count, active_days)
     revenue_stability = determine_revenue_stability(coefficient_of_variation)
     activity_status = determine_activity_status(recency)
-    digital_adoption = determine_digital_payment_adoption(cash_revenue, digital_revenue)
+    digital_adoption = determine_digital_payment_adoption(cash_revenue, digital_revenue, total_revenue)
 
     insights = generate_business_insights(revenue_trend, revenue_stability, activity_status)
 
@@ -94,5 +113,6 @@ def get_business_overview(merchant_id: str, conn) -> dict:
         "revenue_stability": revenue_stability,
         "activity_status": activity_status,
         "digital_payment_adoption": digital_adoption,
+        "payment_method_coverage_pct": payment_method_coverage_pct,
         "insights": insights,
     }
