@@ -12,7 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from bi.overview import get_business_overview
 from bi.visualization import (
@@ -22,30 +22,27 @@ from bi.visualization import (
 )
 from database.connection import get_db
 from services.auth import verify_access_token
-from services.authorization import get_user_merchants, require_merchant_access
+from services.authorization import get_user_merchants, require_merchant_access, require_store_access
 from services.credit_scoring import InsufficientHistoryError, get_merchant_credit_assessment
 from services.onboarding import (
     create_dashboard_merchant,
     issue_connect_code,
     redeem_connect_code_for_user,
 )
-from services.tiers import get_entitlements
+from services.tiers import Feature, FeatureLockedError, get_entitlements, require_feature
+from validation.models import StrictModel
 
 router = APIRouter()
 bearer_scheme = HTTPBearer(auto_error=False)
 
 NO_MERCHANT_DETAIL = "User does not belong to any merchant"  # the dashboard may match on this text
 
-
-# ---------------------------------------------------------------------------
-# Dependencies
-# ---------------------------------------------------------------------------
+# Dependencies code:
 def get_conn():
     """One pooled connection per request, shared by every dependency and the route.
     Commits when the request succeeds and rolls back if it raises."""
     with get_db() as conn:
         yield conn
-
 
 def get_current_user_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
@@ -58,7 +55,6 @@ def get_current_user_id(
     if user_id is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token", headers=unauthorized)
     return user_id
-
 
 @dataclass
 class CurrentMerchant:
@@ -104,27 +100,21 @@ def get_current_merchant(
         created_at=row[1],
     )
 
-
 def get_current_merchant_id(merchant: CurrentMerchant = Depends(get_current_merchant)) -> UUID:
     """Kept for anything that still imports it."""
     return merchant.merchant_id
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-class DashboardOnboardingRequest(BaseModel):
+# Routes code:
+class DashboardOnboardingRequest(StrictModel):
     business_name: str = Field(min_length=1, max_length=100)
     store_name: str | None = Field(default=None, min_length=1, max_length=100)
 
-
-class ConnectCodeRedemption(BaseModel):
+class ConnectCodeRedemption(StrictModel):
     code: str = Field(min_length=1, max_length=32)
 
-
-class ConnectCodeIssue(BaseModel):
+class ConnectCodeIssue(StrictModel):
     store_id: UUID
-
 
 @router.post("/api/onboarding/dashboard", status_code=201)
 def create_dashboard_onboarding(
@@ -352,7 +342,36 @@ def get_my_credit_score(
     merchant: CurrentMerchant = Depends(get_current_merchant),
     conn=Depends(get_conn),
 ):
-    """`credit_score` is null while the profile is still being built. `status` says why."""
+    """Free dashboard summary: status and headline score only."""
+    try:
+        assessment = get_merchant_credit_assessment(merchant.merchant_id, conn)
+    except InsufficientHistoryError:
+        return {
+            "status": "building",
+            "credit_score": None,
+        }
+
+    return {
+        "status": "scored",
+        "credit_score": assessment["score"],
+    }
+
+
+@router.get("/api/credit-score/details")
+def get_my_credit_score_details(
+    merchant: CurrentMerchant = Depends(get_current_merchant),
+    conn=Depends(get_conn),
+):
+    """Premium credit page: progress, score breakdown and supporting metrics."""
+    try:
+        require_feature(
+            Feature.CREDIT_PREVIEW,
+            merchant.tier,
+            merchant.created_at,
+        )
+    except FeatureLockedError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
     try:
         assessment = get_merchant_credit_assessment(merchant.merchant_id, conn)
     except InsufficientHistoryError as error:

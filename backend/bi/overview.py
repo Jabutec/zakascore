@@ -1,17 +1,7 @@
-import statistics
 from datetime import datetime, timedelta
-from collections import namedtuple
 from zoneinfo import ZoneInfo
 
-from bi.metrics import (
-    calculate_total_revenue,
-    calculate_transaction_count,
-    calculate_average_transaction,
-    calculate_revenue_by_date,
-    calculate_revenue_growth,
-    calculate_revenue_volatility,
-    calculate_recency,
-)
+from bi.metrics import calculate_revenue_growth
 from bi.indicators import (
     determine_revenue_trend,
     calculate_transaction_activity,
@@ -23,73 +13,105 @@ from bi.insights import generate_business_insights
 
 SAST = ZoneInfo("Africa/Johannesburg")
 
-SimpleTransaction = namedtuple("SimpleTransaction", ["amount_zar", "transaction_date", "payment_method"])
-
-
-def get_transactions_for_merchant(merchant_id, conn) -> list[SimpleTransaction]:
-    cursor = conn.execute(
-        """SELECT amount_zar, transaction_date, payment_method
-           FROM transactions t
-           JOIN stores s ON s.store_id = t.store_id
-           WHERE s.merchant_id = %s AND t.is_voided = FALSE
-           ORDER BY t.transaction_date ASC""",
-        (merchant_id,)
-    )
-    rows = cursor.fetchall()
-
-    result = []
-    for amount, date_str, payment_method in rows:
-        date_obj = date_str if isinstance(date_str, datetime) else datetime.fromisoformat(date_str)
-        if date_obj.tzinfo is not None:
-            # Naive SAST wall-clock time, so day buckets match the dashboard.
-            date_obj = date_obj.astimezone(SAST).replace(tzinfo=None)
-        result.append(SimpleTransaction(float(amount), date_obj, payment_method))
-
-    return result
-
-
 def get_business_overview(merchant_id, conn) -> dict:
-    transactions = get_transactions_for_merchant(merchant_id, conn)
-
-    total_revenue = calculate_total_revenue(transactions)
-    transaction_count = calculate_transaction_count(transactions)
-    average_transaction = calculate_average_transaction(transactions)
-    daily_revenue = calculate_revenue_by_date(transactions)
-
-    # Transactions are naive SAST, so "now" must be too (the server may run UTC).
     now = datetime.now(SAST).replace(tzinfo=None)
     thirty_days_ago = now - timedelta(days=30)
     sixty_days_ago = now - timedelta(days=60)
 
-    current_period_txns = [t for t in transactions if t.transaction_date >= thirty_days_ago]
-    previous_period_txns = [t for t in transactions if sixty_days_ago <= t.transaction_date < thirty_days_ago]
+    row = conn.execute(
+        """WITH merchant_transactions AS (
+               SELECT t.amount_zar,
+                      t.payment_method,
+                      t.transaction_date AT TIME ZONE 'Africa/Johannesburg'
+                          AS local_transaction_date
+               FROM transactions t
+               JOIN stores s ON s.store_id = t.store_id
+               WHERE s.merchant_id = %s AND t.is_voided = FALSE
+           ), grouped_revenue AS (
+               SELECT GROUPING(local_transaction_date::date) AS is_total,
+                      local_transaction_date::date AS transaction_day,
+                      COUNT(*) AS transaction_count,
+                      SUM(amount_zar) AS total_revenue,
+                      AVG(amount_zar) AS average_transaction,
+                      SUM(amount_zar) FILTER (
+                          WHERE local_transaction_date >= %s
+                      ) AS current_revenue,
+                      SUM(amount_zar) FILTER (
+                          WHERE local_transaction_date >= %s
+                            AND local_transaction_date < %s
+                      ) AS previous_revenue,
+                      MIN(local_transaction_date) AS first_transaction,
+                      MAX(local_transaction_date) AS latest_transaction,
+                      SUM(amount_zar) FILTER (
+                          WHERE payment_method = 'cash'
+                      ) AS cash_revenue,
+                      SUM(amount_zar) FILTER (
+                          WHERE payment_method = 'digital'
+                      ) AS digital_revenue
+               FROM merchant_transactions
+               GROUP BY GROUPING SETS ((), (local_transaction_date::date))
+           ), overall AS (
+               SELECT * FROM grouped_revenue WHERE is_total = 1
+           ), daily_stats AS (
+               SELECT COUNT(*) AS active_days,
+                      AVG(total_revenue) AS average_daily_revenue,
+                      CASE WHEN COUNT(*) >= 7
+                           THEN STDDEV_SAMP(total_revenue)
+                      END AS revenue_volatility
+               FROM grouped_revenue
+               WHERE is_total = 0
+           )
+           SELECT transaction_count,
+                  COALESCE(total_revenue, 0)::double precision,
+                  COALESCE(average_transaction, 0)::double precision,
+                  COALESCE(current_revenue, 0)::double precision,
+                  COALESCE(previous_revenue, 0)::double precision,
+                  (transaction_count > 0 AND first_transaction <= %s)
+                      AS has_full_prior_window,
+                  active_days,
+                  COALESCE(average_daily_revenue, 0)::double precision,
+                  revenue_volatility::double precision,
+                  CASE WHEN latest_transaction IS NULL THEN NULL
+                       ELSE FLOOR(EXTRACT(EPOCH FROM (%s - latest_transaction)) / 86400)::integer
+                  END AS recency_days,
+                  COALESCE(cash_revenue, 0)::double precision,
+                  COALESCE(digital_revenue, 0)::double precision
+           FROM overall CROSS JOIN daily_stats""",
+        (
+            merchant_id,
+            thirty_days_ago,
+            sixty_days_ago,
+            thirty_days_ago,
+            sixty_days_ago,
+            now,
+        ),
+    ).fetchone()
 
-    current_revenue = calculate_total_revenue(current_period_txns)
-    previous_revenue = calculate_total_revenue(previous_period_txns)
+    transaction_count = row[0]
+    total_revenue = row[1]
+    average_transaction = row[2]
+    current_revenue = row[3]
+    previous_revenue = row[4]
+    has_full_prior_window = row[5]
+    active_days = row[6]
+    average_daily_revenue = row[7]
+    revenue_volatility_raw = row[8]
+    recency = row[9]
+    cash_revenue = row[10]
+    digital_revenue = row[11]
 
-    # Growth is only meaningful if the merchant was trading for the whole previous
-    # window. Otherwise a new merchant's partial window makes growth look huge.
-    # (transactions are ordered oldest first)
-    has_full_prior_window = bool(transactions) and transactions[0].transaction_date <= sixty_days_ago
     revenue_growth = (
         calculate_revenue_growth(current_revenue, previous_revenue)
         if has_full_prior_window
         else None
     )
 
-    revenue_volatility_raw = calculate_revenue_volatility(transactions)  # None if too little data
-    average_daily_revenue = statistics.mean(daily_revenue.values()) if daily_revenue else 0
     coefficient_of_variation = (
         revenue_volatility_raw / average_daily_revenue
         if revenue_volatility_raw is not None and average_daily_revenue > 0
         else None
     )
 
-    active_days = len(daily_revenue)
-    recency = calculate_recency(transactions, now)
-
-    cash_revenue = sum(t.amount_zar for t in transactions if t.payment_method == "cash")
-    digital_revenue = sum(t.amount_zar for t in transactions if t.payment_method == "digital")
     known_payment_revenue = cash_revenue + digital_revenue
     payment_method_coverage_pct = (
         round(known_payment_revenue / total_revenue * 100, 2) if total_revenue > 0 else None

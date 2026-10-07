@@ -4,7 +4,6 @@ Everything returned here is plain JSON-friendly data: money as float rounded to
 2 decimals (Postgres NUMERIC arrives as Decimal), dates as ISO strings.
 """
 
-
 def _money(value) -> float:
     return round(float(value or 0), 2)
 

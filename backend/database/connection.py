@@ -12,15 +12,19 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 DATABASE_URL_DIRECT = os.getenv("DATABASE_URL_DIRECT", "").strip()
 
-POOL_MIN_SIZE = int(os.getenv("DB_POOL_MIN", "1"))
-POOL_MAX_SIZE = int(os.getenv("DB_POOL_MAX", "10"))
+# These limits apply per backend process, so the deployment-wide maximum is
+# DB_POOL_MAX multiplied by the number of processes and instances.
+POOL_MIN_SIZE = int(os.getenv("DB_POOL_MIN", "0"))
+POOL_MAX_SIZE = int(os.getenv("DB_POOL_MAX", "5"))
+if POOL_MIN_SIZE < 0 or POOL_MAX_SIZE < 1 or POOL_MIN_SIZE > POOL_MAX_SIZE:
+    raise ValueError("DB_POOL_MIN and DB_POOL_MAX must satisfy 0 <= min <= max, with max >= 1")
 
 _pool: ConnectionPool | None = None
 _pool_lock = threading.Lock()
 
 
 def open_pool() -> None:
-    """Create the pool once. Call from the FastAPI lifespan on startup."""
+    """Create the pool once; request and script access can initialize it lazily."""
     global _pool
     if _pool is not None:
         return
@@ -30,7 +34,7 @@ def open_pool() -> None:
         if not DATABASE_URL:
             raise RuntimeError("DATABASE_URL is not configured")
 
-        _pool = ConnectionPool(
+        pool = ConnectionPool(
             conninfo=DATABASE_URL,
             min_size=POOL_MIN_SIZE,
             max_size=POOL_MAX_SIZE,
@@ -38,21 +42,22 @@ def open_pool() -> None:
                 "connect_timeout": 10,
                 "prepare_threshold": None,
             },
-
             max_idle=240,
             max_lifetime=1800,
             timeout=30,
             open=False,
         )
-        _pool.open(wait=True, timeout=30)
+        pool.open(wait=True, timeout=30)
+        _pool = pool
 
 
 def close_pool() -> None:
     """Close the pool. Call from the FastAPI lifespan on shutdown."""
     global _pool
-    if _pool is not None:
-        _pool.close()
-        _pool = None
+    with _pool_lock:
+        pool, _pool = _pool, None
+    if pool is not None:
+        pool.close()
 
 
 @contextmanager
