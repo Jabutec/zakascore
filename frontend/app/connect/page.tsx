@@ -66,7 +66,7 @@ export default function ConnectPage() {
       <section className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
         <h1 className="mb-2 text-2xl font-semibold text-gray-900">Set up your business</h1>
         <p className="mb-6 text-sm text-gray-600">
-          Link an existing WhatsApp-first store or create a business profile to connect to WhatsApp later.
+          Create a business profile or join a business with a one-time invite code. Each team member signs in with their own account.
         </p>
         {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         <div className="grid gap-8 md:grid-cols-2">
@@ -98,15 +98,15 @@ export default function ConnectPage() {
               <input value={storeName} onChange={(event) => setStoreName(event.target.value)} maxLength={100} className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2.5" />
             </label>
             <button type="submit" disabled={loading} className="w-full rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-gray-700 disabled:opacity-50">
-              {loading ? "Creating..." : "Create and get WhatsApp code"}
+              {loading ? "Creating..." : "Create business"}
             </button>
           </form>
         </div>
         {newConnectCode && (
           <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-sm text-emerald-900">Send this one-time code to your ZakaScore WhatsApp number:</p>
+            <p className="text-sm text-emerald-900">Share this one-time employee invite code with a team member:</p>
             <p className="mt-2 text-2xl font-semibold tracking-widest text-emerald-950">{newConnectCode}</p>
-            <p className="mt-2 text-xs text-emerald-800">This code expires after 24 hours.</p>
+            <p className="mt-2 text-xs text-emerald-800">This code expires after 24 hours and can be used once.</p>
             <button type="button" onClick={() => router.replace("/dashboard")} className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white">
               Continue to dashboard
             </button>

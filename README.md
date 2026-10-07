@@ -81,6 +81,8 @@ A web dashboard provides a visual interface for exploring financial performance,
 - [x] Authenticated transaction API
 - [x] LLM-powered data parsing
 - [x] Web dashboard
+- [x] Neon Auth accounts and business onboarding
+- [x] Installable PWA chatbot sale logging with offline sync
 - [x] Automated testing
 - [x] CI pipeline
 

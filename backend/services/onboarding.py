@@ -145,118 +145,19 @@ def redeem_connect_code_for_user(code: str, user_id, conn) -> dict:
     with _atomic(conn), conn.cursor() as cur:
         store_id, merchant_id = _lock_valid_connect_code(cur, code)
         cur.execute(
-            "SELECT merchant_id FROM merchants WHERE merchant_id = %s FOR UPDATE",
-            (merchant_id,),
-        )
-        if cur.fetchone() is None:
-            raise ValueError("Invalid or expired connect code")
-        cur.execute(
-            """SELECT user_id FROM merchant_users
-               WHERE merchant_id = %s AND role = 'owner'
-               FOR UPDATE""",
-            (merchant_id,),
-        )
-        owner = cur.fetchone()
-        if owner is not None and owner[0] != user:
-            raise ValueError("Invalid or expired connect code")
-        cur.execute(
             """INSERT INTO merchant_users (user_id, merchant_id, role)
-               VALUES (%s, %s, 'owner')
-               ON CONFLICT (user_id, merchant_id) DO UPDATE SET role = 'owner'""",
+               VALUES (%s, %s, 'employee')
+               ON CONFLICT (user_id, merchant_id) DO NOTHING
+               RETURNING user_id""",
             (user, merchant_id),
         )
+        if cur.fetchone() is None:
+            raise ValueError("This account already belongs to the business")
         cur.execute(
             "UPDATE connect_codes SET used_at = now() WHERE code = %s",
             (code.strip().upper(),),
         )
     return {"store_id": store_id, "merchant_id": merchant_id}
-
-
-def _normalize_whatsapp_number(whatsapp_number: str) -> str:
-    normalized = (whatsapp_number or "").strip()
-    if normalized.lower().startswith("whatsapp:"):
-        normalized = normalized[len("whatsapp:"):].strip()
-    if not normalized or len(normalized) > 64:
-        raise ValueError("Invalid WhatsApp number")
-    return normalized
-
-
-def redeem_connect_code_for_whatsapp(code: str, whatsapp_number: str, conn) -> dict:
-    number = _normalize_whatsapp_number(whatsapp_number)
-    with _atomic(conn), conn.cursor() as cur:
-        store_id, merchant_id = _lock_valid_connect_code(cur, code)
-        cur.execute(
-            """SELECT source_id, store_id
-               FROM data_sources
-               WHERE source_type = 'whatsapp' AND external_identifier = %s""",
-            (number,),
-        )
-        existing = cur.fetchone()
-        if existing is not None and existing[1] != store_id:
-            raise ValueError("WhatsApp number is already connected")
-        if existing is None:
-            cur.execute(
-                """INSERT INTO data_sources
-                       (store_id, source_name, source_type, external_identifier)
-                   VALUES (%s, 'WhatsApp', 'whatsapp', %s)
-                   RETURNING source_id""",
-                (store_id, number),
-            )
-            source_id = cur.fetchone()[0]
-        else:
-            source_id = existing[0]
-        cur.execute(
-            "UPDATE connect_codes SET used_at = now() WHERE code = %s",
-            (code.strip().upper(),),
-        )
-    return {
-        "store_id": store_id,
-        "merchant_id": merchant_id,
-        "source_id": source_id,
-    }
-
-
-def create_whatsapp_merchant(
-    whatsapp_number: str,
-    business_name: str,
-    conn,
-    *,
-    store_name: str | None = None,
-    code_ttl_hours: int = CONNECT_CODE_TTL_HOURS,
-) -> dict:
-    number = _normalize_whatsapp_number(whatsapp_number)
-    name = _clean_business_name(business_name)
-    store = _clean_business_name(store_name) if store_name else name
-    with _atomic(conn), conn.cursor() as cur:
-        cur.execute(
-            """INSERT INTO merchants (business_name, tier)
-               VALUES (%s, %s) RETURNING merchant_id""",
-            (name, Tier.INSIGHTS.value),
-        )
-        merchant_id = cur.fetchone()[0]
-        cur.execute(
-            """INSERT INTO stores (merchant_id, store_name)
-               VALUES (%s, %s) RETURNING store_id""",
-            (merchant_id, store),
-        )
-        store_id = cur.fetchone()[0]
-        cur.execute(
-            """INSERT INTO data_sources
-                   (store_id, source_name, source_type, external_identifier)
-               VALUES (%s, 'WhatsApp', 'whatsapp', %s)
-               RETURNING source_id""",
-            (store_id, number),
-        )
-        source_id = cur.fetchone()[0]
-        connect_code = _create_connect_code(
-            cur, store_id, expires_in_hours=code_ttl_hours
-        )
-    return {
-        "merchant_id": merchant_id,
-        "store_id": store_id,
-        "source_id": source_id,
-        "connect_code": connect_code,
-    }
 
 
 def add_store(user_id, merchant_id, store_name: str, conn) -> dict:

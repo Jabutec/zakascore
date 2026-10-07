@@ -74,7 +74,9 @@ ZakaScore is designed to support multiple sources of business data.
 | `manual`              | Manually entered data      |
 
 The PWA records sales through an authenticated API; the server resolves the store's
-source rather than accepting a source identifier from the client.
+source rather than accepting a source identifier from the client. On-device parsing is
+reviewed by the user before submission. Confirmed offline sales are queued locally with
+stable idempotency keys and retried when the device reconnects.
 
 ## Transactions
 
@@ -132,13 +134,11 @@ requests with the same key return the original transaction.
 
 ## Authentication
 
-The backend currently contains legacy token-based authentication.
-
-Neon Auth is planned as the long-term authentication solution.
+Neon Auth identifies each team member with an individual account. The `merchant_users`
+membership links a user's Neon Auth ID to an authorized business. One-time invite codes
+let additional accounts join as employees; they do not share the owner's credentials.
 
 Authentication and authorization are separate concerns. Authentication identifies the user, while authorization determines which merchant and stores that user can access.
-
-The `merchant_users` table provides the relationship between users and merchants.
 
 ## Frontend
 
@@ -152,8 +152,11 @@ The dashboard currently displays:
 - Top offerings
 - Payment methods
 - Credit score
+- The selected authorized business and its stores
 
-The frontend communicates with FastAPI and does not connect directly to PostgreSQL.
+The installable PWA includes chatbot-assisted sale entry, review-before-save, and an
+offline queue. The frontend communicates with FastAPI and does not connect directly to
+PostgreSQL.
 
 Loading, empty, and API error states are handled by the dashboard.
 

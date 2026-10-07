@@ -489,6 +489,30 @@ a {
   padding-bottom: 4px;
 }
 
+.business-switcher {
+  display: grid;
+  gap: 4px;
+}
+
+.business-switcher span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.business-switcher select {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  font: inherit;
+  max-width: 240px;
+  min-height: 36px;
+  padding: 6px 28px 6px 9px;
+}
+
 .live-dot {
   animation: pulse 2.4s infinite;
 }
@@ -1258,6 +1282,40 @@ a {
   padding: 20px 2px 0;
 }
 
+.team-invite-panel {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 20px 24px;
+}
+
+.team-invite-panel h2 {
+  font-size: 17px;
+  margin: 0;
+}
+
+.team-invite-panel .eyebrow {
+  margin: 0 0 5px;
+}
+
+.team-invite-panel > div > p:last-child {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 5px 0 0;
+}
+
+.team-invite-code {
+  background: var(--emerald-soft);
+  border-radius: var(--radius-sm);
+  color: var(--emerald);
+  font-size: 12px;
+  margin: 0;
+  padding: 9px 11px;
+}
+
 /* ---------- Scrollbar ---------- */
 
 .table-scroll::-webkit-scrollbar {
@@ -1544,4 +1602,424 @@ a {
   font-size: 13px;
   font-weight: 600;
   padding: 10px 16px;
+}
+
+/* ---------- PWA sale logging ---------- */
+
+.logging-screen {
+  min-height: 100vh;
+  padding: 32px 16px;
+}
+
+.logging-app {
+  margin: 0 auto;
+  max-width: 760px;
+}
+
+.logging-header,
+.logging-header-actions,
+.connection-state,
+.logging-footer,
+.sale-confirmation-heading,
+.sale-confirmation-actions {
+  align-items: center;
+  display: flex;
+}
+
+.logging-header {
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.logging-header > div:nth-child(2) {
+  flex: 1;
+}
+
+.logging-brand {
+  align-items: center;
+  background: var(--emerald);
+  border-radius: var(--radius-md);
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 42px;
+  font-size: 21px;
+  font-weight: 700;
+  height: 42px;
+  justify-content: center;
+}
+
+.logging-header h1,
+.logging-empty h1 {
+  font-size: clamp(21px, 4vw, 27px);
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+  margin: 2px 0 0;
+}
+
+.logging-eyebrow,
+.sale-confirmation-heading span {
+  color: var(--subtle);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  margin: 0;
+}
+
+.logging-header-actions {
+  gap: 12px;
+}
+
+.logging-install,
+.logging-submit,
+.logging-secondary,
+.logging-primary-link {
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 650;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 15px;
+  text-decoration: none;
+}
+
+.logging-install,
+.logging-secondary {
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  color: var(--foreground);
+}
+
+.logging-submit,
+.logging-primary-link {
+  background: var(--emerald);
+  color: #fff;
+}
+
+.logging-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.connection-state {
+  color: var(--muted);
+  font-size: 12px;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.connection-state i {
+  background: #dc8a17;
+  border-radius: 50%;
+  height: 7px;
+  width: 7px;
+}
+
+.connection-state.is-online i {
+  background: var(--emerald-bright);
+}
+
+.logging-workspace,
+.logging-empty {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  padding: clamp(18px, 4vw, 30px);
+}
+
+.logging-context {
+  display: grid;
+  gap: 5px;
+}
+
+.logging-context label,
+.sale-confirmation label,
+.manual-entry label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.logging-context strong {
+  font-size: 15px;
+}
+
+.logging-context select,
+.sale-confirmation input,
+.sale-confirmation select,
+.manual-entry input,
+.manual-entry select {
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  min-height: 40px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.logging-context p,
+.assistant-controls p,
+.logging-footer,
+.sync-message {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.logging-status-row {
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  display: flex;
+  font-size: 11px;
+  justify-content: space-between;
+  margin-top: 18px;
+  padding: 9px 0;
+}
+
+.logging-queue-status {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.logging-queue-status button {
+  background: transparent;
+  border: 0;
+  color: var(--emerald);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  padding: 0;
+}
+
+.logging-queue-status button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.logging-conversation {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 390px;
+  min-height: 180px;
+  overflow-y: auto;
+  padding: 18px 0;
+}
+
+.logging-message {
+  align-self: flex-start;
+  background: #f2f5f2;
+  border-radius: 4px 14px 14px;
+  max-width: min(88%, 540px);
+  padding: 10px 13px;
+}
+
+.logging-message.you {
+  align-self: flex-end;
+  background: var(--emerald-soft);
+  border-radius: 14px 4px 14px 14px;
+}
+
+.logging-message > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.logging-message p {
+  font-size: 13px;
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.logging-thinking {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+.logging-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.logging-input-row input {
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.sale-confirmation {
+  background: #f8fbf8;
+  border: 1px solid #cfe7d8;
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 16px;
+}
+
+.sale-confirmation-heading {
+  justify-content: space-between;
+}
+
+.sale-confirmation-heading strong {
+  font-size: 18px;
+}
+
+.sale-confirmation > p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: -2px 0 3px;
+}
+
+.sale-confirmation-actions {
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.assistant-controls {
+  align-items: flex-start;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 15px;
+}
+
+.logging-error {
+  background: #fff5f3;
+  border: 1px solid #f4d0c9;
+  border-radius: var(--radius-sm);
+  color: #8c2d1b;
+  font-size: 12px;
+  margin: 10px 0 0;
+  padding: 9px 11px;
+}
+
+.sync-message {
+  margin-top: 10px;
+}
+
+.manual-entry {
+  border-top: 1px solid var(--border);
+  margin-top: 18px;
+  padding-top: 14px;
+}
+
+.manual-entry summary {
+  color: var(--foreground);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.manual-entry form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 12px;
+}
+
+.manual-entry button {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+.logging-footer {
+  border-top: 1px solid var(--border);
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding-top: 14px;
+}
+
+.logging-footer a {
+  color: var(--emerald);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.logging-empty {
+  margin: 12vh auto 0;
+  max-width: 420px;
+  text-align: center;
+}
+
+.logging-empty .logging-brand {
+  margin-bottom: 18px;
+}
+
+.logging-empty p {
+  color: var(--muted);
+  margin: 10px 0 20px;
+}
+
+.logging-loading {
+  color: var(--muted);
+  margin: 20vh auto 0;
+  max-width: 300px;
+  text-align: center;
+}
+
+.visually-hidden {
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (max-width: 560px) {
+  .logging-screen {
+    padding: 16px 10px;
+  }
+
+  .logging-header {
+    gap: 9px;
+  }
+
+  .logging-header-actions {
+    align-items: flex-end;
+    flex-direction: column-reverse;
+    gap: 5px;
+  }
+
+  .logging-install {
+    min-height: 34px;
+    padding: 6px 9px;
+  }
+
+  .logging-status-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .sale-confirmation-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .manual-entry form {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-entry button {
+    justify-self: stretch;
+  }
 }
