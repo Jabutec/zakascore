@@ -145,9 +145,24 @@ def redeem_connect_code_for_user(code: str, user_id, conn) -> dict:
     with _atomic(conn), conn.cursor() as cur:
         store_id, merchant_id = _lock_valid_connect_code(cur, code)
         cur.execute(
+            "SELECT merchant_id FROM merchants WHERE merchant_id = %s FOR UPDATE",
+            (merchant_id,),
+        )
+        if cur.fetchone() is None:
+            raise ValueError("Invalid or expired connect code")
+        cur.execute(
+            """SELECT user_id FROM merchant_users
+               WHERE merchant_id = %s AND role = 'owner'
+               FOR UPDATE""",
+            (merchant_id,),
+        )
+        owner = cur.fetchone()
+        if owner is not None and owner[0] != user:
+            raise ValueError("Invalid or expired connect code")
+        cur.execute(
             """INSERT INTO merchant_users (user_id, merchant_id, role)
                VALUES (%s, %s, 'owner')
-               ON CONFLICT (user_id, merchant_id) DO NOTHING""",
+               ON CONFLICT (user_id, merchant_id) DO UPDATE SET role = 'owner'""",
             (user, merchant_id),
         )
         cur.execute(

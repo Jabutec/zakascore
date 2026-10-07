@@ -8,7 +8,7 @@ including authorization and the SQL, is real. Only creates and deletes merchants
 """
 import os
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import psycopg
@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from api import auth as api_auth
 from api.webhook import app
+from services.onboarding import create_whatsapp_merchant
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -456,16 +457,13 @@ def test_dashboard_onboarding_creates_owner_membership_and_connect_code(client, 
     assert conn.execute(
         "SELECT store_id FROM connect_codes WHERE code = %s",
         (result["connect_code"],),
-    ).fetchone() == (result["store_id"],)
+    ).fetchone() == (UUID(result["store_id"]),)
 
 
 def test_connect_code_redemption_requires_authentication_and_consumes_valid_code(client, conn):
-    response = client.post(
-        "/api/onboarding/dashboard",
-        headers=login(client, uuid4()),
-        json={"business_name": "TEST Connect Redemption"},
+    result = create_whatsapp_merchant(
+        "+27820000100", "TEST Connect Redemption", conn
     )
-    result = response.json()
     user = uuid4()
 
     unauthenticated = client.post(
@@ -480,8 +478,8 @@ def test_connect_code_redemption_requires_authentication_and_consumes_valid_code
     )
     assert redeemed.status_code == 200
     assert redeemed.json() == {
-        "store_id": result["store_id"],
-        "merchant_id": result["merchant_id"],
+        "store_id": str(result["store_id"]),
+        "merchant_id": str(result["merchant_id"]),
     }
     assert conn.execute(
         "SELECT role FROM merchant_users WHERE user_id = %s AND merchant_id = %s",

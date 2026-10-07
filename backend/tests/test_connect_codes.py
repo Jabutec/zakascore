@@ -154,6 +154,22 @@ def test_expired_code_is_not_consumed(conn):
     ).fetchone() == (None,)
 
 
+def test_code_cannot_assign_a_second_owner_to_dashboard_business(conn):
+    result = _new_dashboard_store(conn, "Owner")
+
+    with pytest.raises(ValueError, match="Invalid or expired"):
+        redeem_connect_code_for_user(result["connect_code"], uuid4(), conn)
+
+    assert conn.execute(
+        "SELECT used_at FROM connect_codes WHERE code = %s",
+        (result["connect_code"],),
+    ).fetchone() == (None,)
+    assert conn.execute(
+        "SELECT count(*) FROM merchant_users WHERE merchant_id = %s AND role = 'owner'",
+        (result["merchant_id"],),
+    ).fetchone() == (1,)
+
+
 def test_deleted_store_invalidates_its_connect_code(conn):
     result = _new_dashboard_store(conn, "DeletedStore")
     conn.execute("DELETE FROM stores WHERE store_id = %s", (result["store_id"],))
@@ -164,7 +180,9 @@ def test_deleted_store_invalidates_its_connect_code(conn):
 
 
 def test_concurrent_redemptions_have_at_most_one_success(conn):
-    result = _new_dashboard_store(conn, "Concurrent")
+    result = create_whatsapp_merchant(
+        "+27820000004", "TEST ConnectCode Concurrent", conn
+    )
     users = (uuid4(), uuid4())
 
     def redeem(user_id):
@@ -184,4 +202,4 @@ def test_concurrent_redemptions_have_at_most_one_success(conn):
     assert conn.execute(
         "SELECT count(*) FROM merchant_users WHERE merchant_id = %s",
         (result["merchant_id"],),
-    ).fetchone() == (2,)
+    ).fetchone() == (1,)
