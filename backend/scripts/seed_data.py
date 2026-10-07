@@ -25,22 +25,10 @@ SEED = int(os.getenv("SEED", "42"))
 
 # Python Faker has no en_ZA; names are locale-agnostic enough and
 # locations come from SA_CITIES below.
-SOURCE_TYPES = [
-    "pos",
-    "online_store",
-    "bank_statement",
-    "accounting_software",
-    "pwa",
-    "manual",
-    "csv",
-]
+SOURCE_TYPES = ["pwa"]
 
-# Every input type is recorded against a matching source, so grouping by
-# source in the BI layer gives meaningful results.
+# One data source for version one
 INPUT_TO_SOURCE = {
-    "pos_tap": "pos",
-    "manual": "manual",
-    "csv": "csv",
     "pwa": "pwa",
 }
 
@@ -96,8 +84,7 @@ def seed_data():
 
     now = datetime.now(timezone.utc)
 
-    # Last 6 calendar months, oldest first. Computed up front so the
-    # transactions below span exactly this window.
+    # Last 6 calendar months, oldest first.
     period_starts = []
     month = get_month_start(datetime.now())
     for _ in range(6):

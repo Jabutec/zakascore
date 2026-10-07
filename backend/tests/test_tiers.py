@@ -48,11 +48,11 @@ def test_free_features_are_always_available():
             assert tiers.has_feature(feature, Tier.INSIGHTS, created(90), NOW)
 
 
-def test_logging_sales_can_never_be_premium():
-    # The principle of this module: the data the score is built from is never paywalled.
+def test_basic_dashboard_and_sales_logging_stay_free():
     assert Feature.SALES_LOGGING not in tiers.PREMIUM_FEATURES
     assert Feature.DASHBOARD not in tiers.PREMIUM_FEATURES
-    assert Feature.CREDIT_PREVIEW not in tiers.PREMIUM_FEATURES
+    assert Feature.SCORE_PROGRESS in tiers.PREMIUM_FEATURES
+    assert Feature.CREDIT_PREVIEW in tiers.PREMIUM_FEATURES
 
 
 def test_premium_features_lock_after_the_trial_and_unlock_for_paying_merchants():
@@ -82,7 +82,9 @@ def test_entitlements_for_the_dashboard():
     free = tiers.get_entitlements(Tier.INSIGHTS, created(90), NOW)
     assert free["tier"] == "insights" and not free["in_trial"] and free["trial_days_left"] == 0
     assert free["features"]["sales_logging"] is True
-    assert free["features"]["credit_preview"] is True
+    assert free["features"]["dashboard"] is True
+    assert free["features"]["score_progress"] is False
+    assert free["features"]["credit_preview"] is False
     assert free["features"]["credit_access"] is False
     assert free["features"]["report_download"] is False
     assert set(free["features"]) == {f.value for f in Feature}

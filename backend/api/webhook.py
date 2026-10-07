@@ -1,4 +1,5 @@
 """FastAPI application and authenticated PWA transaction logging endpoint."""
+from contextlib import asynccontextmanager
 import os
 from decimal import Decimal
 from uuid import UUID
@@ -9,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import AwareDatetime, ValidationError
 
 from api.auth import get_conn, get_current_user_id, router as auth_router
+from database.connection import close_pool
 from services.authorization import require_store_access
 from services.onboarding import get_pwa_source_id
 from services.offerings import get_or_create_offering
@@ -23,7 +25,15 @@ load_dotenv()
 
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        yield
+    finally:
+        close_pool()
+
+
+app = FastAPI(lifespan=lifespan)
 app.include_router(auth_router)
 
 app.add_middleware(

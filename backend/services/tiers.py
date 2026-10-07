@@ -22,11 +22,11 @@ DAILY_LOGGING_CEILING = {Tier.INSIGHTS: 200, Tier.FULL: 1000}
 
 
 class Feature(str, Enum):
-    # Free: data going in, plus enough going out to show the value.
+    # Free: data entry and the basic business dashboard, including its score.
     SALES_LOGGING = "sales_logging"
     DASHBOARD = "dashboard"
     SCORE_PROGRESS = "score_progress"      # how far through building their profile
-    CREDIT_PREVIEW = "credit_preview"      # "you could qualify for about R X"
+    CREDIT_PREVIEW = "credit_preview"      # estimated amount and detailed score preview
 
     # Premium: acting on the data.
     CREDIT_ACCESS = "credit_access"        # share the assessment with lenders / apply
@@ -40,6 +40,8 @@ class Feature(str, Enum):
 
 PREMIUM_FEATURES = frozenset(
     {
+        Feature.SCORE_PROGRESS,
+        Feature.CREDIT_PREVIEW,
         Feature.CREDIT_ACCESS,
         Feature.REPORT_DOWNLOAD,
         Feature.LENDER_STATEMENT,

@@ -400,10 +400,24 @@ def test_credit_score_is_still_building_for_a_new_merchant(client, conn):
     user = uuid4()
     _, store_id, source_id = make_merchant(conn, "TEST New", owner=user)
     add_sale(conn, store_id, source_id, 100)
-    data = client.get("/api/credit-score", headers=login(client, user)).json()
-    assert data["status"] == "building"
-    assert data["credit_score"] is None
-    assert data["weeks_required"] == 12 and data["weeks_of_history"] == 0
+    headers = login(client, user)
+    data = client.get("/api/credit-score", headers=headers).json()
+    assert data == {"status": "building", "credit_score": None}
+
+    details = client.get("/api/credit-score/details", headers=headers).json()
+    assert details["status"] == "building"
+    assert details["credit_score"] is None
+    assert details["weeks_required"] == 12 and details["weeks_of_history"] == 0
+
+
+def test_free_tier_cannot_access_credit_score_details(client, conn):
+    user = uuid4()
+    make_merchant(conn, "TEST Free Credit Details", owner=user, created_days_ago=90)
+
+    response = client.get("/api/credit-score/details", headers=login(client, user))
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "credit_preview is a premium feature"
 
 
 def test_credit_score_for_an_established_merchant(client, conn):
@@ -417,12 +431,18 @@ def test_credit_score_for_an_established_merchant(client, conn):
             when = datetime.combine(monday + timedelta(days=offset), datetime.min.time(), SAST).replace(hour=10)
             add_sale(conn, store_id, source_id, 500, when=when)
 
-    data = client.get("/api/credit-score", headers=login(client, user)).json()
+    headers = login(client, user)
+    data = client.get("/api/credit-score", headers=headers).json()
     assert data["status"] == "scored"
     assert 0 <= data["credit_score"] <= 100
-    assert set(data["components"]) == {"stability", "growth", "revenue_level", "consistency"}
-    assert data["metrics"]["weeks_scored"] == 12
-    assert {"start", "end"} == set(data["window"])
+    assert set(data) == {"status", "credit_score"}
+
+    details = client.get("/api/credit-score/details", headers=headers).json()
+    assert details["status"] == "scored"
+    assert 0 <= details["credit_score"] <= 100
+    assert set(details["components"]) == {"stability", "growth", "revenue_level", "consistency"}
+    assert details["metrics"]["weeks_scored"] == 12
+    assert {"start", "end"} == set(details["window"])
 
 
 def test_entitlements(client, conn):
