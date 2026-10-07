@@ -12,6 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
 
 from bi.overview import get_business_overview
 from bi.visualization import (
@@ -23,6 +24,10 @@ from database.connection import get_db
 from services.auth import verify_access_token
 from services.authorization import get_user_merchants, require_merchant_access
 from services.credit_scoring import InsufficientHistoryError, get_merchant_credit_assessment
+from services.onboarding import (
+    create_dashboard_merchant,
+    redeem_connect_code_for_user,
+)
 from services.tiers import get_entitlements
 
 router = APIRouter()
@@ -107,6 +112,47 @@ def get_current_merchant_id(merchant: CurrentMerchant = Depends(get_current_merc
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+class DashboardOnboardingRequest(BaseModel):
+    business_name: str = Field(min_length=1, max_length=100)
+    store_name: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class ConnectCodeRedemption(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+
+
+@router.post("/api/onboarding/dashboard", status_code=201)
+def create_dashboard_onboarding(
+    request: DashboardOnboardingRequest,
+    user_id: str = Depends(get_current_user_id),
+    conn=Depends(get_conn),
+):
+    try:
+        return create_dashboard_merchant(
+            user_id,
+            request.business_name.strip(),
+            conn,
+            store_name=request.store_name.strip() if request.store_name else None,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/api/connect-codes/redeem")
+def redeem_dashboard_connect_code(
+    request: ConnectCodeRedemption,
+    user_id: str = Depends(get_current_user_id),
+    conn=Depends(get_conn),
+):
+    try:
+        return redeem_connect_code_for_user(request.code, user_id, conn)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired connect code",
+        ) from error
+
+
 @router.get("/api/transactions")
 def get_my_transactions(
     limit: int = Query(20, ge=1, le=100),

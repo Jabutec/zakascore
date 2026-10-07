@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { authClient } from "@/lib/auth/client";
 
 export interface Transaction {
   transaction_id: string;
@@ -170,9 +172,26 @@ export default function DashboardView({
   paymentMethods,
   creditScore,
 }: DashboardViewProps) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState<7 | 30 | 0>(30);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+
+  async function signOut() {
+    setSignOutError("");
+    try {
+      const result = await authClient.signOut();
+      if (result.error) {
+        setSignOutError(result.error.message || "Unable to sign out.");
+        return;
+      }
+      router.replace("/login");
+      router.refresh();
+    } catch {
+      setSignOutError("Could not reach Neon Auth. Check your connection and try again.");
+    }
+  }
 
   const chartPoints = (() => {
     if (period === 0) return revenue;
@@ -238,6 +257,10 @@ export default function DashboardView({
             <Icon name="settings" />
             <span>Settings</span>
           </div>
+          <button type="button" className="nav-link" onClick={signOut}>
+            <span>Sign out</span>
+          </button>
+          {signOutError && <p role="alert" className="text-xs text-red-300">{signOutError}</p>}
           <div className="sidebar-identity">
             <div className="avatar avatar-small">ZS</div>
             <div className="identity-copy">

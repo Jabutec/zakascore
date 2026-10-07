@@ -26,6 +26,8 @@ class FakeCursor:
             if self.conn.fail_source_insert:
                 raise RuntimeError("simulated PWA source insert failure")
             self.result = (self.conn.source_id,)
+        elif "INSERT INTO connect_codes" in query:
+            self.result = (self.conn.connect_code,)
         else:
             self.result = None
 
@@ -38,6 +40,7 @@ class FakeConnection:
         self.merchant_id = uuid4()
         self.store_id = uuid4()
         self.source_id = uuid4()
+        self.connect_code = "TESTCODE"
         self.fail_source_insert = fail_source_insert
         self.statements = []
         self.commits = 0
@@ -63,15 +66,18 @@ def test_create_dashboard_merchant_creates_owner_store_and_pwa_source_atomically
         "merchant_id": conn.merchant_id,
         "store_id": conn.store_id,
         "source_id": conn.source_id,
+        "connect_code": conn.connect_code,
     }
     assert conn.commits == 1
     assert conn.rollbacks == 0
-    assert len(conn.statements) == 4
+    assert len(conn.statements) == 5
     assert conn.statements[0][1] == ("Demo Merchant", "insights")
     assert conn.statements[1][1] == (user_id, conn.merchant_id)
     assert "'owner'" in conn.statements[1][0]
     assert conn.statements[3][1] == (conn.store_id,)
     assert "'PWA', 'pwa'" in conn.statements[3][0]
+    assert len(conn.statements[4][1][0]) == 8
+    assert conn.statements[4][1][1] == conn.store_id
 
 
 def test_create_dashboard_merchant_rolls_back_after_a_later_insert_fails():

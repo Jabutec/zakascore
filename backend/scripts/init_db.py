@@ -56,12 +56,39 @@ SCHEMA_STATEMENTS = [
         source_type         TEXT NOT NULL
                             CHECK (source_type IN (
                                 'pos', 'bank_statement', 'accounting_software',
-                                'online_store', 'pwa', 'csv', 'manual'
+                                'online_store', 'whatsapp', 'pwa', 'csv', 'manual'
                             )),
         external_identifier TEXT,
         is_active           BOOLEAN NOT NULL DEFAULT TRUE,
         created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
         UNIQUE (source_id, store_id)
+    );
+    """,
+    """
+    ALTER TABLE data_sources
+        DROP CONSTRAINT IF EXISTS data_sources_source_type_check;
+    """,
+    """
+    ALTER TABLE data_sources
+        ADD CONSTRAINT data_sources_source_type_check
+        CHECK (source_type IN (
+            'pos', 'bank_statement', 'accounting_software',
+            'online_store', 'whatsapp', 'pwa', 'csv', 'manual'
+        ));
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS uniq_whatsapp_source_per_number
+        ON data_sources (external_identifier)
+        WHERE source_type = 'whatsapp' AND external_identifier IS NOT NULL;
+    """,
+    # ------------------------------------------------------------- connect_codes
+    """
+    CREATE TABLE IF NOT EXISTS connect_codes (
+        code       TEXT PRIMARY KEY,
+        store_id   UUID NOT NULL REFERENCES stores(store_id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at    TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     """,
     # --------------------------------------------------------------- offerings

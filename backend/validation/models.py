@@ -60,6 +60,7 @@ class SourceType(str, Enum):
     BANK_STATEMENT = "bank_statement"
     ACCOUNTING_SOFTWARE = "accounting_software"
     ONLINE_STORE = "online_store"
+    WHATSAPP = "whatsapp"
     PWA = "pwa"
     CSV = "csv"
     MANUAL = "manual"
@@ -95,6 +96,14 @@ class DataSource(StrictModel):
     source_type: SourceType
     external_identifier: str | None = None
     is_active: bool = True
+    created_at: AwareDatetime | None = None
+
+
+class ConnectCode(StrictModel):
+    code: str
+    store_id: StoreID
+    expires_at: AwareDatetime
+    used_at: AwareDatetime | None = None
     created_at: AwareDatetime | None = None
 
 

@@ -8,7 +8,7 @@ including authorization and the SQL, is real. Only creates and deletes merchants
 """
 import os
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import psycopg
@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from api import auth as api_auth
 from api.webhook import app
+from services.onboarding import create_whatsapp_merchant
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
 
@@ -436,3 +437,62 @@ def test_entitlements(client, conn):
 
     paid = client.get("/api/entitlements", headers=login(client, paid_user)).json()
     assert paid["tier"] == "full" and all(paid["features"].values())
+
+
+def test_dashboard_onboarding_creates_owner_membership_and_connect_code(client, conn):
+    user = uuid4()
+    response = client.post(
+        "/api/onboarding/dashboard",
+        headers=login(client, user),
+        json={"business_name": "TEST Connect API", "store_name": "Main"},
+    )
+
+    assert response.status_code == 201
+    result = response.json()
+    assert result["connect_code"]
+    assert conn.execute(
+        "SELECT role FROM merchant_users WHERE user_id = %s AND merchant_id = %s",
+        (user, result["merchant_id"]),
+    ).fetchone() == ("owner",)
+    assert conn.execute(
+        "SELECT store_id FROM connect_codes WHERE code = %s",
+        (result["connect_code"],),
+    ).fetchone() == (UUID(result["store_id"]),)
+
+
+def test_connect_code_redemption_requires_authentication_and_consumes_valid_code(client, conn):
+    result = create_whatsapp_merchant(
+        "+27820000100", "TEST Connect Redemption", conn
+    )
+    user = uuid4()
+
+    unauthenticated = client.post(
+        "/api/connect-codes/redeem", json={"code": result["connect_code"]}
+    )
+    assert unauthenticated.status_code == 401
+
+    redeemed = client.post(
+        "/api/connect-codes/redeem",
+        headers=login(client, user),
+        json={"code": result["connect_code"]},
+    )
+    assert redeemed.status_code == 200
+    assert redeemed.json() == {
+        "store_id": str(result["store_id"]),
+        "merchant_id": str(result["merchant_id"]),
+    }
+    assert conn.execute(
+        "SELECT role FROM merchant_users WHERE user_id = %s AND merchant_id = %s",
+        (user, result["merchant_id"]),
+    ).fetchone() == ("owner",)
+    assert conn.execute(
+        "SELECT used_at IS NOT NULL FROM connect_codes WHERE code = %s",
+        (result["connect_code"],),
+    ).fetchone() == (True,)
+    repeated = client.post(
+        "/api/connect-codes/redeem",
+        headers=login(client, uuid4()),
+        json={"code": result["connect_code"]},
+    )
+    assert repeated.status_code == 400
+    assert repeated.json()["detail"] == "Invalid or expired connect code"

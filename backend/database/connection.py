@@ -38,10 +38,10 @@ def open_pool() -> None:
                 "connect_timeout": 10,
                 "prepare_threshold": None,
             },
-            
-            max_idle=240,        
-            max_lifetime=1800,   
-            timeout=30,          
+
+            max_idle=240,
+            max_lifetime=1800,
+            timeout=30,
             open=False,
         )
         _pool.open(wait=True, timeout=30)
