@@ -1632,7 +1632,74 @@ a {
   margin-bottom: 20px;
 }
 
-.logging-header > div:nth-child(2) {
+.logging-menu-wrap {
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.logging-menu-button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.logging-menu-button span {
+  background: var(--foreground);
+  border-radius: 2px;
+  height: 2px;
+  width: 17px;
+}
+
+.logging-menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: grid;
+  gap: 2px;
+  left: 0;
+  min-width: 205px;
+  padding: 6px;
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 20;
+}
+
+.logging-menu a,
+.logging-menu-disabled {
+  align-items: center;
+  border-radius: 4px;
+  color: var(--foreground);
+  display: flex;
+  font-size: 13px;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 8px 10px;
+  text-decoration: none;
+}
+
+.logging-menu a:hover,
+.logging-menu a:focus-visible {
+  background: var(--background);
+}
+
+.logging-menu-disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.logging-menu-disabled small {
+  font-size: 10px;
+}
+
+.logging-header > div:nth-of-type(2) {
   flex: 1;
 }
 

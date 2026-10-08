@@ -27,7 +27,13 @@ export default function LoginPage() {
         return;
       }
 
-      router.replace("/dashboard");
+      const nextPath = new URLSearchParams(window.location.search).get("next");
+      const destination = nextPath && (nextPath === "/workspace" || nextPath.startsWith("/workspace/"))
+        ? nextPath
+        : nextPath && (nextPath === "/app" || nextPath.startsWith("/app/"))
+          ? `/workspace${nextPath.slice(4)}`
+          : "/dashboard";
+      router.replace(destination);
       router.refresh();
     } catch {
       setError("Could not reach Neon Auth. Check your connection and try again.");

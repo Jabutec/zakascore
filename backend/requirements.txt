@@ -3,7 +3,7 @@ psycopg[binary]==3.2.10
 Faker==40.36.0
 matplotlib==3.11.1
 openai
-PyJWT
+PyJWT[crypto]
 pydantic==2.13.4
 pytest==9.1.1
 python-dotenv

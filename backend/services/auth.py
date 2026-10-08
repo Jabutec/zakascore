@@ -92,7 +92,8 @@ def verify_access_token(token: str) -> str | None:
     except PyJWKClientConnectionError:
         logger.error("Could not reach the Neon Auth JWKS endpoint")
         return None
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as error:
+        logger.warning("Neon Auth token verification failed: %s", type(error).__name__)
         return None
 
     subject = payload.get("sub")
