@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
-import { PwaRegister } from "./pwa-register";
 
 export const metadata: Metadata = {
   title: "ZakaScore | Financial Intelligence",
   description: "Financial data and alternative credit scoring for South African SMEs.",
-  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -21,7 +19,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
       </head>
       <body className="min-h-full">
-        <PwaRegister />
         {children}
       </body>
     </html>

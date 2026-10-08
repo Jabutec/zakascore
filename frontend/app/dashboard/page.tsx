@@ -8,7 +8,7 @@ import DashboardView, {
   type PaymentMethod,
   type RevenuePoint,
   type Transaction,
-} from "./dashboard-view";
+} from "./dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +17,17 @@ interface BusinessList {
   businesses: Business[];
 }
 
+export interface DashboardPageProps {
+  searchParams: Promise<{ business?: string }>;
+  pwaMode?: boolean;
+}
+
 async function getData<T>(
   apiUrl: string,
   endpoint: string,
   token: string,
   merchantId?: string,
+  loginPath = "/login?next=%2Fdashboard",
 ): Promise<T> {
   const headers = new Headers({ Authorization: `Bearer ${token}` });
   if (merchantId) headers.set("X-Merchant-Id", merchantId);
@@ -31,7 +37,7 @@ async function getData<T>(
   });
 
   if (response.status === 401) {
-    redirect("/login");
+    redirect(loginPath);
   }
   if (response.status === 403) {
     redirect("/connect");
@@ -45,15 +51,26 @@ async function getData<T>(
 
 export default async function DashboardPage({
   searchParams,
+  pwaMode = false,
 }: {
   searchParams: Promise<{ business?: string }>;
+  pwaMode?: boolean;
 }) {
-  const { data: session, error } = await getAuth().getSession();
+  const loginPath = pwaMode ? "/login?next=%2Fworkspace%2Fdashboard" : "/login?next=%2Fdashboard";
+  const auth = getAuth();
+  const { data: session, error } = await auth.getSession();
   if (error) {
     throw new Error("Unable to verify your sign-in session");
   }
-  if (!session?.user?.id || !session.session?.token) {
-    redirect("/login");
+  if (!session?.user?.id) {
+    redirect(loginPath);
+  }
+  const { data: accessToken, error: tokenError } = await auth.token();
+  if (tokenError) {
+    throw new Error("Unable to obtain an access token");
+  }
+  if (!accessToken?.token) {
+    redirect(loginPath);
   }
 
   const apiUrl = (
@@ -63,26 +80,26 @@ export default async function DashboardPage({
     throw new Error("Dashboard API is not configured");
   }
 
-  const token = session.session.token;
+  const token = accessToken.token;
   const { business: requestedBusinessId } = await searchParams;
-  const workspace = await getData<BusinessList>(apiUrl, "/api/businesses", token);
+  const workspace = await getData<BusinessList>(apiUrl, "/api/businesses", token, undefined, loginPath);
   const selectedBusiness = requestedBusinessId
     ? workspace.businesses.find((business) => business.merchant_id === requestedBusinessId)
     : workspace.businesses.find(
         (business) => business.merchant_id === workspace.selected_merchant_id,
       );
   if (!selectedBusiness) {
-    redirect("/dashboard");
+    redirect(pwaMode ? "/workspace/dashboard" : "/dashboard");
   }
   const selectedMerchantId = selectedBusiness.merchant_id;
   const [transactions, revenue, topOfferings, overview, paymentMethods, creditScore] =
     await Promise.all([
-      getData<Transaction[]>(apiUrl, "/api/transactions", token, selectedMerchantId),
-      getData<RevenuePoint[]>(apiUrl, "/api/revenue", token, selectedMerchantId),
-      getData<Offering[]>(apiUrl, "/api/top-offerings", token, selectedMerchantId),
-      getData<DashboardOverview>(apiUrl, "/api/overview", token, selectedMerchantId),
-      getData<PaymentMethod[]>(apiUrl, "/api/payment-methods", token, selectedMerchantId),
-      getData<CreditScore>(apiUrl, "/api/credit-score", token, selectedMerchantId),
+      getData<Transaction[]>(apiUrl, "/api/transactions", token, selectedMerchantId, loginPath),
+      getData<RevenuePoint[]>(apiUrl, "/api/revenue", token, selectedMerchantId, loginPath),
+      getData<Offering[]>(apiUrl, "/api/top-offerings", token, selectedMerchantId, loginPath),
+      getData<DashboardOverview>(apiUrl, "/api/overview", token, selectedMerchantId, loginPath),
+      getData<PaymentMethod[]>(apiUrl, "/api/payment-methods", token, selectedMerchantId, loginPath),
+      getData<CreditScore>(apiUrl, "/api/credit-score", token, selectedMerchantId, loginPath),
     ]);
 
   return (
@@ -95,6 +112,7 @@ export default async function DashboardPage({
       creditScore={creditScore}
       businesses={workspace.businesses}
       selectedBusiness={selectedBusiness}
+      pwaMode={pwaMode}
     />
   );
 }

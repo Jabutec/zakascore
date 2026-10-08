@@ -152,7 +152,7 @@ def redeem_connect_code_for_user(code: str, user_id, conn) -> dict:
             (user, merchant_id),
         )
         if cur.fetchone() is None:
-            raise ValueError("This account already belongs to the business")
+            raise ValueError("Invalid or expired connect code")
         cur.execute(
             "UPDATE connect_codes SET used_at = now() WHERE code = %s",
             (code.strip().upper(),),

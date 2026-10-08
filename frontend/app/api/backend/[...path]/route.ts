@@ -3,11 +3,19 @@ import { getAuth } from "@/lib/auth/server";
 type BackendRouteContext = { params: Promise<{ path: string[] }> };
 
 async function proxyToBackend(request: Request, context: BackendRouteContext) {
-  const { data: session, error } = await getAuth().getSession();
+  const auth = getAuth();
+  const { data: session, error } = await auth.getSession();
   if (error) {
     return Response.json({ detail: "Unable to verify session" }, { status: 502 });
   }
-  if (!session?.user?.id || !session.session?.token) {
+  if (!session?.user?.id) {
+    return Response.json({ detail: "Authentication required" }, { status: 401 });
+  }
+  const { data: accessToken, error: tokenError } = await auth.token();
+  if (tokenError) {
+    return Response.json({ detail: "Unable to obtain access token" }, { status: 502 });
+  }
+  if (!accessToken?.token) {
     return Response.json({ detail: "Authentication required" }, { status: 401 });
   }
 
@@ -24,7 +32,7 @@ async function proxyToBackend(request: Request, context: BackendRouteContext) {
   const headers = new Headers();
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
-  headers.set("Authorization", `Bearer ${session.session.token}`);
+  headers.set("Authorization", `Bearer ${accessToken.token}`);
 
   const method = request.method.toUpperCase();
   const body =

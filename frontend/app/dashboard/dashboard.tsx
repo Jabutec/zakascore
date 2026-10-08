@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
 
@@ -67,6 +67,7 @@ interface DashboardViewProps {
   creditScore: CreditScore;
   businesses: Business[];
   selectedBusiness: Business;
+  pwaMode?: boolean;
 }
 
 const currency = new Intl.NumberFormat("en-ZA", {
@@ -188,6 +189,7 @@ export default function DashboardView({
   creditScore,
   businesses,
   selectedBusiness,
+  pwaMode = false,
 }: DashboardViewProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -197,6 +199,21 @@ export default function DashboardView({
   const [inviteCode, setInviteCode] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
+  const dashboardPath = pwaMode ? "/workspace/dashboard" : "/dashboard";
+
+  useEffect(() => {
+    function showNotificationPanelFromHash() {
+      if (window.location.hash !== "#notifications-panel") return;
+      setShowNotifications(true);
+      window.requestAnimationFrame(() => {
+        document.getElementById("notifications-panel")?.scrollIntoView({ block: "nearest" });
+      });
+    }
+
+    showNotificationPanelFromHash();
+    window.addEventListener("hashchange", showNotificationPanelFromHash);
+    return () => window.removeEventListener("hashchange", showNotificationPanelFromHash);
+  }, []);
 
   async function signOut() {
     setSignOutError("");
@@ -206,7 +223,7 @@ export default function DashboardView({
         setSignOutError(result.error.message || "Unable to sign out.");
         return;
       }
-      router.replace("/login");
+      router.replace(pwaMode ? "/workspace" : "/login");
       router.refresh();
     } catch {
       setSignOutError("Could not reach Neon Auth. Check your connection and try again.");
@@ -290,6 +307,12 @@ export default function DashboardView({
         </a>
         <div className="sidebar-label">WORKSPACE</div>
         <nav className="nav-list">
+          {pwaMode && (
+            <a className="nav-link" href="/workspace" aria-label="Log a sale" title="Log a sale">
+              <Icon name="reports" />
+              <span>Log a sale</span>
+            </a>
+          )}
           {[
             ["overview", "Overview", "#overview"],
             ["merchants", "Business", "#business-portfolio"],
@@ -385,7 +408,7 @@ export default function DashboardView({
                   <select
                     aria-label="Select business workspace"
                     value={selectedBusiness.merchant_id}
-                    onChange={(event) => router.push(`/dashboard?business=${encodeURIComponent(event.target.value)}`)}
+                    onChange={(event) => router.push(`${dashboardPath}?business=${encodeURIComponent(event.target.value)}`)}
                   >
                     {businesses.map((business) => (
                       <option key={business.merchant_id} value={business.merchant_id}>{business.business_name}</option>

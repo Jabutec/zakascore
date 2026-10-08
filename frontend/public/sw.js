@@ -1,9 +1,16 @@
-const CACHE_NAME = "zakascore-pwa-v1";
+const CACHE_NAME = "zakascore-pwa-v3";
 const OFFLINE_PAGE = "/offline.html";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.add(OFFLINE_PAGE)),
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.add(OFFLINE_PAGE);
+      try {
+        await cache.add("/workspace");
+      } catch {
+        return;
+      }
+    }),
   );
   self.skipWaiting();
 });
@@ -31,7 +38,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok && (url.pathname === "/app" || url.pathname === "/app/")) {
+          if (response.ok && (url.pathname === "/workspace" || url.pathname === "/workspace/")) {
             const copy = response.clone();
             return caches.open(CACHE_NAME).then((cache) =>
               cache.put(request, copy).then(() => response),

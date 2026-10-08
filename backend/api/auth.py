@@ -22,7 +22,7 @@ from bi.visualization import (
 )
 from database.connection import get_db
 from services.auth import verify_access_token
-from services.authorization import get_user_merchants, require_merchant_access
+from services.authorization import get_user_merchants, require_merchant_access, require_store_access
 from services.credit_scoring import InsufficientHistoryError, get_merchant_credit_assessment
 from services.onboarding import (
     create_dashboard_merchant,

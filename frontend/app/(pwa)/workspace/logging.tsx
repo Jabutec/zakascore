@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const MAX_QUEUED_TRANSACTIONS = 500;
 const QUEUE_PREFIX = "zakascore-pwa-queue:";
+const WORKSPACE_KEY = "zakascore-pwa-workspace";
 
 type PaymentMethod = "cash" | "digital";
 type Role = "owner" | "admin" | "employee" | "viewer";
@@ -19,6 +20,11 @@ type Business = {
   business_name: string;
   role: Role;
   stores: Store[];
+};
+type CachedWorkspace = {
+  selected_merchant_id: string;
+  selected_store_id: string;
+  businesses: Business[];
 };
 type SaleDraft = {
   amount_zar: number | null;
@@ -63,6 +69,67 @@ async function createLocalEngine(onProgress: (message: string) => void) {
 }
 
 type LocalModelEngine = Awaited<ReturnType<typeof createLocalEngine>>;
+
+function isCachedWorkspace(value: unknown): value is CachedWorkspace {
+  if (!value || typeof value !== "object") return false;
+  const workspace = value as Partial<CachedWorkspace>;
+  const roles: Role[] = ["owner", "admin", "employee", "viewer"];
+  return (
+    typeof workspace.selected_merchant_id === "string" &&
+    typeof workspace.selected_store_id === "string" &&
+    Array.isArray(workspace.businesses) &&
+    workspace.businesses.every((business) => {
+      if (!business || typeof business !== "object") return false;
+      const candidate = business as Partial<Business>;
+      return (
+        typeof candidate.merchant_id === "string" &&
+        typeof candidate.business_name === "string" &&
+        roles.includes(candidate.role as Role) &&
+        Array.isArray(candidate.stores) &&
+        candidate.stores.every(
+          (store) =>
+            !!store &&
+            typeof store.store_id === "string" &&
+            typeof store.store_name === "string" &&
+            typeof store.pwa_logging_enabled === "boolean",
+        )
+      );
+    })
+  );
+}
+
+function loadCachedWorkspace(): CachedWorkspace | null {
+  try {
+    const raw = window.localStorage.getItem(WORKSPACE_KEY);
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
+    return isCachedWorkspace(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedWorkspace(workspace: CachedWorkspace) {
+  try {
+    window.localStorage.setItem(WORKSPACE_KEY, JSON.stringify(workspace));
+  } catch {
+    return;
+  }
+}
+
+function workspaceSelection(workspace: CachedWorkspace) {
+  const business =
+    workspace.businesses.find((item) => item.merchant_id === workspace.selected_merchant_id) ??
+    workspace.businesses[0];
+  const store =
+    business?.stores.find(
+      (item) => item.store_id === workspace.selected_store_id && item.pwa_logging_enabled,
+    ) ?? business?.stores.find((item) => item.pwa_logging_enabled);
+  return {
+    businessId: business?.merchant_id ?? "",
+    storeId: store?.store_id ?? "",
+  };
+}
 
 const SYSTEM_PROMPT = `You extract details for one completed sale made by a South African small business.
 Return only JSON with exactly these keys:
@@ -204,8 +271,11 @@ export default function LoggingApp() {
   const [appError, setAppError] = useState("");
   const [syncMessage, setSyncMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [online, setOnline] = useState(true);
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine,
+  );
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [manualAmount, setManualAmount] = useState("");
   const [manualItem, setManualItem] = useState("");
   const [manualQuantity, setManualQuantity] = useState("");
@@ -258,7 +328,6 @@ export default function LoggingApp() {
   }, [replaceQueue, storeId]);
 
   useEffect(() => {
-    setOnline(navigator.onLine);
     const onOnline = () => {
       setOnline(true);
       void syncQueue();
@@ -280,8 +349,20 @@ export default function LoggingApp() {
 
   useEffect(() => {
     let cancelled = false;
+    const cachedWorkspace = loadCachedWorkspace();
     async function loadStores() {
       try {
+        if (!navigator.onLine && cachedWorkspace) {
+          const selection = workspaceSelection(cachedWorkspace);
+          if (!cancelled) {
+            setBusinesses(cachedWorkspace.businesses);
+            setBusinessId(selection.businessId);
+            setStoreId(selection.storeId);
+            setSyncMessage("Using the saved workspace. New sales will sync when you reconnect.");
+          }
+          return;
+        }
+
         const response = await fetch("/api/backend/api/businesses", { cache: "no-store" });
         if (response.status === 401) {
           if (!cancelled) setAuthNeeded(true);
@@ -307,11 +388,27 @@ export default function LoggingApp() {
           result.businesses.find((business) => business.merchant_id === result.selected_merchant_id) ??
           result.businesses[0];
         if (selectedBusiness) {
+          const workspace: CachedWorkspace = {
+            selected_merchant_id: selectedBusiness.merchant_id,
+            selected_store_id:
+              selectedBusiness.stores.find((store) => store.pwa_logging_enabled)?.store_id ?? "",
+            businesses: result.businesses,
+          };
           setBusinessId(selectedBusiness.merchant_id);
-          setStoreId(selectedBusiness.stores.find((store) => store.pwa_logging_enabled)?.store_id ?? "");
+          setStoreId(workspace.selected_store_id);
+          saveCachedWorkspace(workspace);
         }
       } catch (error) {
-        if (!cancelled) setAppError(error instanceof Error ? error.message : "Unable to load your stores.");
+        if (cancelled) return;
+        if (cachedWorkspace && (error instanceof TypeError || !navigator.onLine)) {
+          const selection = workspaceSelection(cachedWorkspace);
+          setBusinesses(cachedWorkspace.businesses);
+          setBusinessId(selection.businessId);
+          setStoreId(selection.storeId);
+          setSyncMessage("Using the saved workspace. New sales will sync when you reconnect.");
+        } else {
+          setAppError(error instanceof Error ? error.message : "Unable to load your stores.");
+        }
       } finally {
         if (!cancelled) setLoadingStores(false);
       }
@@ -324,14 +421,23 @@ export default function LoggingApp() {
 
   useEffect(() => {
     if (!storeId) return;
-    try {
-      const saved = loadQueue(storeId);
-      queueRef.current = saved;
-      setQueue(saved);
-      if (navigator.onLine && saved.length > 0) void syncQueue();
-    } catch (error) {
-      setAppError(error instanceof Error ? error.message : "Unable to read saved offline sales.");
-    }
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      try {
+        const saved = loadQueue(storeId);
+        if (cancelled) return;
+        queueRef.current = saved;
+        setQueue(saved);
+        if (navigator.onLine && saved.length > 0) void syncQueue();
+      } catch (error) {
+        if (!cancelled) {
+          setAppError(error instanceof Error ? error.message : "Unable to read saved offline sales.");
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [storeId, syncQueue]);
 
   async function loadAssistant() {
@@ -516,7 +622,7 @@ export default function LoggingApp() {
           <span className="logging-brand">Z</span>
           <h1>Sign in to log a sale</h1>
           <p>Your business records are only available after you sign in.</p>
-          <Link href="/login" className="logging-primary-link">Sign in</Link>
+          <Link href="/login?next=%2Fworkspace" className="logging-primary-link">Sign in</Link>
         </section>
       </main>
     );
@@ -539,7 +645,47 @@ export default function LoggingApp() {
     <main className="logging-screen">
       <div className="logging-app">
         <header className="logging-header">
-          <Link href="/" className="logging-brand" aria-label="ZakaScore home">Z</Link>
+          <div className="logging-menu-wrap">
+            <button
+              type="button"
+              className="logging-menu-button"
+              aria-label={menuOpen ? "Close app menu" : "Open app menu"}
+              aria-expanded={menuOpen}
+              aria-controls="logging-app-menu"
+              title={menuOpen ? "Close menu" : "Open menu"}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <span />
+              <span />
+              <span />
+            </button>
+            {menuOpen && (
+              <nav className="logging-menu" id="logging-app-menu" aria-label="App navigation">
+                <Link href="/workspace" aria-current="page" onClick={() => setMenuOpen(false)}>
+                  Log a sale
+                </Link>
+                {online ? (
+                  <>
+                    <Link href="/workspace/dashboard#overview" onClick={() => setMenuOpen(false)}>Dashboard</Link>
+                    <Link href="/workspace/dashboard#revenue-chart" onClick={() => setMenuOpen(false)}>Reports</Link>
+                    <Link href="/workspace/dashboard#score-overview" onClick={() => setMenuOpen(false)}>Credit</Link>
+                    <Link href="/workspace/dashboard#insights" onClick={() => setMenuOpen(false)}>Insights</Link>
+                    <Link href="/workspace/dashboard#notifications-panel" onClick={() => setMenuOpen(false)}>Notifications</Link>
+                  </>
+                ) : (
+                  <>
+                    <span className="logging-menu-disabled" aria-disabled="true">Dashboard <small>Online only</small></span>
+                    <span className="logging-menu-disabled" aria-disabled="true">Reports <small>Online only</small></span>
+                    <span className="logging-menu-disabled" aria-disabled="true">Credit <small>Online only</small></span>
+                    <span className="logging-menu-disabled" aria-disabled="true">Insights <small>Online only</small></span>
+                    <span className="logging-menu-disabled" aria-disabled="true">Notifications <small>Online only</small></span>
+                  </>
+                )}
+                <span className="logging-menu-disabled" aria-disabled="true">Settings <small>Coming soon</small></span>
+              </nav>
+            )}
+          </div>
+          <Link href="/workspace" className="logging-brand" aria-label="ZakaScore app home">Z</Link>
           <div>
             <p className="logging-eyebrow">ZAKASCORE · BUSINESS LOG</p>
             <h1>Log a sale</h1>
@@ -561,8 +707,14 @@ export default function LoggingApp() {
                   disabled={busy || syncing}
                   onChange={(event) => {
                     const nextBusiness = businesses.find((business) => business.merchant_id === event.target.value);
+                    const nextStoreId = nextBusiness?.stores.find((store) => store.pwa_logging_enabled)?.store_id ?? "";
                     setBusinessId(event.target.value);
-                    setStoreId(nextBusiness?.stores.find((store) => store.pwa_logging_enabled)?.store_id ?? "");
+                    setStoreId(nextStoreId);
+                    saveCachedWorkspace({
+                      selected_merchant_id: event.target.value,
+                      selected_store_id: nextStoreId,
+                      businesses,
+                    });
                     setQueue([]);
                     queueRef.current = [];
                     setDraft(null);
@@ -582,7 +734,14 @@ export default function LoggingApp() {
             )}
             <label htmlFor="logging-store">Store</label>
             {stores.length > 1 ? (
-              <select id="logging-store" value={storeId} disabled={busy || syncing} onChange={(event) => setStoreId(event.target.value)}>
+              <select id="logging-store" value={storeId} disabled={busy || syncing} onChange={(event) => {
+                setStoreId(event.target.value);
+                saveCachedWorkspace({
+                  selected_merchant_id: businessId,
+                  selected_store_id: event.target.value,
+                  businesses,
+                });
+              }}>
                 {stores.map((store) => <option value={store.store_id} key={store.store_id}>{store.store_name}</option>)}
               </select>
             ) : <strong>{selectedStore?.store_name ?? "No store available"}</strong>}
@@ -709,7 +868,6 @@ export default function LoggingApp() {
 
           <footer className="logging-footer">
             <span>{online ? "Sales sync securely to your authorized business." : "Confirmed sales are stored on this device until you reconnect."}</span>
-            <a href="/dashboard">Dashboard</a>
           </footer>
         </section>
       </div>
