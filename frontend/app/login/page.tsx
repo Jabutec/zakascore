@@ -32,7 +32,7 @@ export default function LoginPage() {
         ? nextPath
         : nextPath && (nextPath === "/app" || nextPath.startsWith("/app/"))
           ? `/workspace${nextPath.slice(4)}`
-          : "/dashboard";
+          : "/workspace";
       router.replace(destination);
       router.refresh();
     } catch {

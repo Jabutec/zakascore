@@ -3,8 +3,12 @@
 venv/
  
 # Python cache
+# Pytest cache
+.pytest_cache/
+
+# Python cache
 __pycache__/
-*.pyc
+*.py[cod]
  
 # Database 
 backend/data/*.db

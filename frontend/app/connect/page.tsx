@@ -28,7 +28,7 @@ export default function ConnectPage() {
         setError(result.detail || "Unable to connect this account.");
         return;
       }
-      router.replace("/dashboard");
+      router.replace("/workspace");
       router.refresh();
     } catch {
       setError("Could not reach ZakaScore. Check your connection and try again.");
