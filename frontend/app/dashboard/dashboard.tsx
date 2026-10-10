@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+
+// Put your logo file in frontend/public and set its filename here (same one used in logging.tsx).
+const LOGO_SRC = "/logo.png";
 
 export interface Transaction {
   transaction_id: string;
@@ -130,6 +135,10 @@ function Icon({ name, size = 19 }: { name: string; size?: number }) {
       return <svg {...common}><path d="M5 12h14M13 6l6 6-6 6" /></svg>;
     case "trend":
       return <svg {...common}><path d="m4 16 5-5 4 3 7-8M14 6h6v6" /></svg>;
+    case "menu":
+      return <svg {...common}><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
+    case "close":
+      return <svg {...common}><path d="M6 6l12 12M18 6 6 18" /></svg>;
     default:
       return null;
   }
@@ -199,6 +208,7 @@ export default function DashboardView({
   const [inviteCode, setInviteCode] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const dashboardPath = pwaMode ? "/workspace/dashboard" : "/dashboard";
 
   useEffect(() => {
@@ -214,6 +224,20 @@ export default function DashboardView({
     window.addEventListener("hashchange", showNotificationPanelFromHash);
     return () => window.removeEventListener("hashchange", showNotificationPanelFromHash);
   }, []);
+
+  // Mobile drawer: lock page scroll while open and close with Escape.
+  useEffect(() => {
+    document.body.classList.toggle("menu-open", menuOpen);
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.classList.remove("menu-open");
+    };
+  }, [menuOpen]);
 
   async function signOut() {
     setSignOutError("");
@@ -300,18 +324,53 @@ export default function DashboardView({
 
   return (
     <div className="dashboard-shell">
-      <aside className="sidebar" aria-label="Main navigation">
+      {menuOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close menu"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
+      <aside
+        id="dashboard-sidebar"
+        className={`sidebar${menuOpen ? " open" : ""}`}
+        aria-label="Main navigation"
+        onClick={(event) => {
+          // Close the mobile drawer after tapping any link inside it.
+          if ((event.target as HTMLElement).closest("a")) setMenuOpen(false);
+        }}
+      >
+        <button
+          type="button"
+          className="icon-button sidebar-close"
+          aria-label="Close menu"
+          onClick={() => setMenuOpen(false)}
+        >
+          <Icon name="close" size={20} />
+        </button>
+
         <a className="brand" href="#overview" aria-label="ZakaScore overview">
-          <span className="brand-mark">Z</span>
+          <span className="brand-mark">
+            <Image
+              src={LOGO_SRC}
+              alt=""
+              fill
+              sizes="40px"
+              style={{ objectFit: "cover", transform: "scale(1.45)" }}
+              priority
+            />
+          </span>
           <span className="brand-name">Zaka<span>Score</span></span>
         </a>
         <div className="sidebar-label">WORKSPACE</div>
         <nav className="nav-list">
           {pwaMode && (
-            <a className="nav-link" href="/workspace" aria-label="Log a sale" title="Log a sale">
+            <Link className="nav-link" href="/workspace" aria-label="Log a sale" title="Log a sale">
               <Icon name="reports" />
               <span>Log a sale</span>
-            </a>
+            </Link>
           )}
           {[
             ["overview", "Overview", "#overview"],
@@ -340,7 +399,7 @@ export default function DashboardView({
           <button type="button" className="nav-link" onClick={signOut}>
             <span>Sign out</span>
           </button>
-          {signOutError && <p role="alert" className="text-xs text-red-300">{signOutError}</p>}
+          {signOutError && <p role="alert" className="form-error">{signOutError}</p>}
           <div className="sidebar-identity">
             <div className="avatar avatar-small">ZS</div>
             <div className="identity-copy">
@@ -353,7 +412,19 @@ export default function DashboardView({
 
       <main className="dashboard-main" id="overview">
         <header className="topbar">
-          <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-divider">/</span><strong>Overview</strong></div>
+          <div className="topbar-left">
+            <button
+              type="button"
+              className="icon-button menu-button"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+              aria-controls="dashboard-sidebar"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <Icon name="menu" size={20} />
+            </button>
+            <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-divider">/</span><strong>Overview</strong></div>
+          </div>
           <div className="topbar-actions">
             <label className="search-box">
               <Icon name="search" size={17} />
@@ -606,11 +677,11 @@ export default function DashboardView({
                 <h2>Invite a team member</h2>
                 <p>Create a one-time code. A team member signs up with their own account and joins as an employee.</p>
               </div>
-              <button type="button" className="logging-submit" onClick={() => void inviteTeamMember()} disabled={inviteLoading}>
+              <button type="button" className="btn-lime" onClick={() => void inviteTeamMember()} disabled={inviteLoading}>
                 {inviteLoading ? "Creating invite…" : "Create invite code"}
               </button>
               {inviteCode && <p className="team-invite-code" role="status">Share once: <strong>{inviteCode}</strong> · expires in 24 hours</p>}
-              {inviteError && <p className="logging-error" role="alert">{inviteError}</p>}
+              {inviteError && <p className="form-error" role="alert">{inviteError}</p>}
             </section>
           ) : null}
 

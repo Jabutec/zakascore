@@ -1,7 +1,27 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ArrowUp,
+  BarChart3,
+  Bell,
+  Download,
+  Gauge,
+  LayoutDashboard,
+  Lightbulb,
+  Menu,
+  RefreshCw,
+  Settings,
+  SquarePen,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+
+// Put your logo file in frontend/public and set its filename here.
+const LOGO_SRC = "/logo.png";
 
 const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const MAX_QUEUED_TRANSACTIONS = 500;
@@ -47,19 +67,52 @@ type InstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-type LocalEngine = {
-  chat: {
-    completions: {
-      create: (request: {
-        messages: { role: "system" | "user"; content: string }[];
-        temperature: number;
-        response_format: { type: "json_object" };
-      }) => Promise<{
-        choices: { message: { content: string | null } }[];
-      }>;
-    };
-  };
-};
+/* -------------------------------------------------------------------------- */
+/*  Design tokens                                                             */
+/*  ~60% white · ~30% glossy lime (same as the landing page) · ~10% black    */
+/*  Lime #A3E635 fills carry dark text; #4d7c0f is the readable lime-toned    */
+/*  text colour on white. Headings: semibold only.                            */
+/* -------------------------------------------------------------------------- */
+
+const softShadow =
+  "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_1px_rgba(16,24,40,0.04),0_4px_10px_-2px_rgba(16,24,40,0.06)]";
+
+const deepShadow =
+  "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_1px_rgba(16,24,40,0.04),0_2px_4px_rgba(16,24,40,0.04),0_8px_16px_-4px_rgba(16,24,40,0.06),0_24px_48px_-16px_rgba(16,24,40,0.12)]";
+
+/* Glossy lime: gradient + inset highlight + a faint gloss band on top half */
+const limeGloss =
+  "relative isolate overflow-hidden border border-[#65a30d]/40 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_1px_rgba(16,24,40,0.08),0_8px_20px_-6px_rgba(101,163,13,0.55)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-1/2 before:bg-gradient-to-b before:from-white/40 before:to-transparent";
+
+const limeBtn = `${limeGloss} transition hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50`;
+
+const glassPanel = `border border-black/[0.07] bg-gradient-to-b from-white/90 to-white/60 backdrop-blur-xl backdrop-saturate-150 ${deepShadow}`;
+
+const navBase =
+  "flex min-h-10 w-full items-center gap-3 rounded-xl border border-transparent px-3 text-sm transition";
+
+const selectClass =
+  "w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-[#0B0F19] outline-none transition focus:border-[#65a30d]/50 disabled:opacity-60";
+
+const EXAMPLE_PROMPTS = [
+  "Sold 2 shirts for R300, cash",
+  "R1 500 card payment for a haircut package",
+  "3 airtime vouchers, R150 total, digital",
+];
+
+const APP_NAV: { label: string; href: string; icon: LucideIcon }[] = [
+  { label: "Dashboard", href: "/workspace/dashboard#overview", icon: LayoutDashboard },
+  { label: "Reports", href: "/workspace/dashboard#revenue-chart", icon: BarChart3 },
+  { label: "Credit", href: "/workspace/dashboard#score-overview", icon: Gauge },
+  { label: "Insights", href: "/workspace/dashboard#insights", icon: Lightbulb },
+  { label: "Notifications", href: "/workspace/dashboard#notifications-panel", icon: Bell },
+];
+
+const GREETING = "Tell me about a sale and I’ll prepare it for your review.";
+
+/* -------------------------------------------------------------------------- */
+/*  Local engine + parsing helpers (unchanged logic)                          */
+/* -------------------------------------------------------------------------- */
 
 async function createLocalEngine(onProgress: (message: string) => void) {
   const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
@@ -204,6 +257,25 @@ function parseFollowUpPayment(text: string): PaymentMethod | null {
   return null;
 }
 
+/*
+  Basic on-device fallback used when the WebLLM assistant isn't loaded
+  (e.g. no WebGPU). With the manual form gone, this keeps the single message
+  bar usable everywhere. Prefers an amount marked with R/ZAR, otherwise the
+  last number in the message.
+*/
+function parseSaleLocally(text: string): SaleDraft | null {
+  const marked = text.match(/(?:\br|zar)\s*\d[\d ,]*(?:[.,]\d{1,2})?(?:k\b)?/i);
+  let amount = marked ? parseFollowUpAmount(marked[0]) : null;
+  if (amount === null) {
+    const numbers = text.match(/\d[\d,.]*(?:k\b)?/gi);
+    const last = numbers?.[numbers.length - 1];
+    amount = last ? parseFollowUpAmount(last) : null;
+  }
+  const payment = parseFollowUpPayment(text);
+  if (amount === null && payment === null) return null;
+  return { amount_zar: amount, payment_method: payment, offering_name: null, quantity: null };
+}
+
 function queueKey(storeId: string) {
   return `${QUEUE_PREFIX}${storeId}`;
 }
@@ -246,11 +318,50 @@ async function responseError(response: Response): Promise<string> {
   return `The server could not save this sale (HTTP ${response.status}).`;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Small presentational pieces                                               */
+/* -------------------------------------------------------------------------- */
+
+function BrandMark({ className = "h-9 w-9" }: { className?: string }) {
+  return (
+    <span
+      className={`relative inline-flex shrink-0 overflow-hidden rounded-xl border border-black/[0.07] bg-white ${softShadow} ${className}`}
+      aria-hidden="true"
+    >
+      <Image src={LOGO_SRC} alt="" fill sizes="64px" className="scale-[1.45] object-cover" priority />
+    </span>
+  );
+}
+
+function StateScreen({ title, text, href, cta }: { title: string; text: string; href: string; cta: string }) {
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-white p-6 text-[#0B0F19]">
+      <section className={`w-full max-w-sm rounded-3xl p-8 text-center ${glassPanel}`}>
+        <BrandMark className="mx-auto h-12 w-12 text-xl" />
+        <h1 className="mt-5 text-xl font-semibold tracking-tight">{title}</h1>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">{text}</p>
+        <Link
+          href={href}
+          className={`${limeBtn} mt-6 inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-medium`}
+        >
+          {cta}
+        </Link>
+      </section>
+    </main>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Main component                                                            */
+/* -------------------------------------------------------------------------- */
+
 export default function LoggingApp() {
   const engineRef = useRef<LocalModelEngine | null>(null);
   const queueRef = useRef<QueuedTransaction[]>([]);
   const syncInProgress = useRef(false);
   const messageId = useRef(0);
+  const endRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [businessId, setBusinessId] = useState("");
   const [storeId, setStoreId] = useState("");
@@ -258,7 +369,7 @@ export default function LoggingApp() {
   const [authNeeded, setAuthNeeded] = useState(false);
   const [businessSetupNeeded, setBusinessSetupNeeded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: 0, speaker: "assistant", text: "Tell me about a sale and I’ll prepare it for your review." },
+    { id: 0, speaker: "assistant", text: GREETING },
   ]);
   const [entry, setEntry] = useState("");
   const [draft, setDraft] = useState<SaleDraft | null>(null);
@@ -276,14 +387,11 @@ export default function LoggingApp() {
   );
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [manualAmount, setManualAmount] = useState("");
-  const [manualItem, setManualItem] = useState("");
-  const [manualQuantity, setManualQuantity] = useState("");
-  const [manualPayment, setManualPayment] = useState<PaymentMethod>("cash");
 
   const addMessage = useCallback((speaker: ChatMessage["speaker"], text: string) => {
     messageId.current += 1;
-    setMessages((current) => [...current, { id: messageId.current, speaker, text }]);
+    const id = messageId.current; // capture now: the updater below runs later, after batching
+    setMessages((current) => [...current, { id, speaker, text }]);
   }, []);
 
   const replaceQueue = useCallback((next: QueuedTransaction[]) => {
@@ -440,10 +548,27 @@ export default function LoggingApp() {
     };
   }, [storeId, syncQueue]);
 
+  // Keep the newest message in view.
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, draft, busy]);
+
+  // Close the mobile drawer with Escape.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
+
   async function loadAssistant() {
     if (modelLoading || modelReady) return;
     if (!("gpu" in navigator)) {
-      setModelError("WebGPU is unavailable in this browser. Use the manual sale form below.");
+      setModelError(
+        "WebGPU isn’t available in this browser. You can still describe sales and I’ll read them with basic on-device matching.",
+      );
       return;
     }
     setModelLoading(true);
@@ -476,11 +601,28 @@ export default function LoggingApp() {
     }
   }
 
-  async function submitMessage(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const text = entry.trim();
-    if (!text || !modelReady || !engineRef.current || busy || !canLog) return;
+  function choosePayment(method: PaymentMethod) {
+    if (!draft || busy) return;
+    addMessage("you", method === "cash" ? "Cash" : "Digital");
+    requestMissingDetails({ ...draft, payment_method: method });
+  }
+
+  function resetChat() {
+    messageId.current = 0;
+    setMessages([{ id: 0, speaker: "assistant", text: GREETING }]);
+    setDraft(null);
     setEntry("");
+    setAppError("");
+    setMenuOpen(false);
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+  }
+
+  async function submitMessage(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    const text = entry.trim();
+    if (!text || busy || !storeId || !canLog) return;
+    setEntry("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
     setAppError("");
     addMessage("you", text);
 
@@ -496,15 +638,20 @@ export default function LoggingApp() {
 
     setBusy(true);
     try {
-      const result = await engineRef.current.chat.completions.create({
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: text },
-        ],
-        temperature: 0,
-        response_format: { type: "json_object" },
-      });
-      const sale = parseModelOutput(result.choices[0]?.message.content ?? null);
+      let sale: SaleDraft | null;
+      if (modelReady && engineRef.current) {
+        const result = await engineRef.current.chat.completions.create({
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: text },
+          ],
+          temperature: 0,
+          response_format: { type: "json_object" },
+        });
+        sale = parseModelOutput(result.choices[0]?.message.content ?? null);
+      } else {
+        sale = parseSaleLocally(text);
+      }
       if (!sale) {
         setDraft(null);
         addMessage("assistant", "I couldn’t identify a sale total. Please describe one completed sale, including its total and payment method.");
@@ -518,31 +665,7 @@ export default function LoggingApp() {
     }
   }
 
-  function submitManualSale(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const amount = Number(manualAmount);
-    const quantity = manualQuantity ? Number(manualQuantity) : null;
-    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) {
-      setAppError("Enter a total between R0.01 and R100,000.");
-      return;
-    }
-    if (quantity !== null && (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000)) {
-      setAppError("Quantity must be a whole number between 1 and 1,000.");
-      return;
-    }
-    const offering = manualItem.trim() || (quantity ? "general sale" : null);
-    const sale = {
-      amount_zar: Math.round(amount * 100) / 100,
-      payment_method: manualPayment,
-      offering_name: offering,
-      quantity,
-    };
-    setAppError("");
-    requestMissingDetails(sale);
-  }
-
-  async function confirmSale(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function confirmSale() {
     if (!draft || draft.amount_zar === null || !draft.payment_method || !storeId || busy || !canLog) return;
     const store = stores.find((item) => item.store_id === storeId);
     if (!store) {
@@ -605,272 +728,525 @@ export default function LoggingApp() {
     if (choice.outcome === "accepted") setInstallPrompt(null);
   }
 
+  function changeBusiness(nextBusinessId: string) {
+    const nextBusiness = businesses.find((business) => business.merchant_id === nextBusinessId);
+    const nextStoreId = nextBusiness?.stores.find((store) => store.pwa_logging_enabled)?.store_id ?? "";
+    setBusinessId(nextBusinessId);
+    setStoreId(nextStoreId);
+    saveCachedWorkspace({
+      selected_merchant_id: nextBusinessId,
+      selected_store_id: nextStoreId,
+      businesses,
+    });
+    setQueue([]);
+    queueRef.current = [];
+    setDraft(null);
+  }
+
+  function changeStore(nextStoreId: string) {
+    setStoreId(nextStoreId);
+    saveCachedWorkspace({
+      selected_merchant_id: businessId,
+      selected_store_id: nextStoreId,
+      businesses,
+    });
+  }
+
+  function onComposerKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
   const selectedBusiness = businesses.find((business) => business.merchant_id === businessId);
   const stores = (selectedBusiness?.stores ?? []).filter((store) => store.pwa_logging_enabled);
   const role = selectedBusiness?.role ?? null;
   const canLog = role !== null && role !== "viewer";
   const selectedStore = stores.find((store) => store.store_id === storeId);
+  const draftComplete = !!draft && draft.amount_zar !== null && !!draft.payment_method;
+  const needsPayment = !!draft && draft.amount_zar !== null && draft.payment_method === null;
+  const showWelcome = messages.length <= 1 && !draft;
+  const composerDisabled = busy || !storeId || !canLog;
 
   if (loadingStores) {
-    return <main className="logging-screen"><p className="logging-loading">Loading your business workspace…</p></main>;
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-white p-6">
+        <p className="text-sm text-slate-500">Loading your business workspace…</p>
+      </main>
+    );
   }
 
   if (authNeeded) {
     return (
-      <main className="logging-screen">
-        <section className="logging-empty">
-          <span className="logging-brand">Z</span>
-          <h1>Sign in to log a sale</h1>
-          <p>Your business records are only available after you sign in.</p>
-          <Link href="/login?next=%2Fworkspace" className="logging-primary-link">Sign in</Link>
-        </section>
-      </main>
+      <StateScreen
+        title="Sign in to log a sale"
+        text="Your business records are only available after you sign in."
+        href="/login?next=%2Fworkspace"
+        cta="Sign in"
+      />
     );
   }
 
   if (businessSetupNeeded) {
     return (
-      <main className="logging-screen">
-        <section className="logging-empty">
-          <span className="logging-brand">Z</span>
-          <h1>Connect your business</h1>
-          <p>Set up a business or join one with an invite code before recording sales.</p>
-          <Link href="/connect" className="logging-primary-link">Business setup</Link>
-        </section>
-      </main>
+      <StateScreen
+        title="Connect your business"
+        text="Set up a business or join one with an invite code before recording sales."
+        href="/connect"
+        cta="Business setup"
+      />
     );
   }
 
-  return (
-    <main className="logging-screen">
-      <div className="logging-app">
-        <header className="logging-header">
-          <div className="logging-menu-wrap">
+  /* ------------------------------- Sidebar -------------------------------- */
+
+  const sidebar = (
+    <div className="flex h-full flex-col gap-5 p-4">
+      <Link
+        href="/workspace"
+        className="flex items-center gap-3 rounded-xl px-1 py-1"
+        onClick={() => setMenuOpen(false)}
+        aria-label="ZakaScore app home"
+      >
+        <BrandMark />
+        <span className="text-[17px] font-semibold tracking-tight">
+          Zaka<span className="text-[#4d7c0f]">Score</span>
+        </span>
+      </Link>
+
+      <button
+        type="button"
+        onClick={resetChat}
+        className={`${limeBtn} flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium`}
+      >
+        <SquarePen className="h-4 w-4" aria-hidden="true" />
+        New sale
+      </button>
+
+      <nav aria-label="App navigation" className="grid gap-1">
+        <Link
+          href="/workspace"
+          aria-current="page"
+          onClick={() => setMenuOpen(false)}
+          className={`${navBase} border-[#65a30d]/15 bg-gradient-to-b from-[#f7fee7] to-white font-medium text-[#4d7c0f] ${softShadow}`}
+        >
+          <SquarePen className="h-4 w-4" aria-hidden="true" />
+          Log a sale
+        </Link>
+
+        {APP_NAV.map(({ label, href, icon: Icon }) =>
+          online ? (
+            <Link
+              key={label}
+              href={href}
+              onClick={() => setMenuOpen(false)}
+              className={`${navBase} text-slate-700 hover:border-black/[0.06] hover:bg-white/80`}
+            >
+              <Icon className="h-4 w-4 text-slate-500" aria-hidden="true" />
+              {label}
+            </Link>
+          ) : (
+            <span
+              key={label}
+              aria-disabled="true"
+              className={`${navBase} cursor-not-allowed text-slate-400`}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              <span className="flex-1">{label}</span>
+              <small className="text-[10px]">Online only</small>
+            </span>
+          ),
+        )}
+
+        <span aria-disabled="true" className={`${navBase} cursor-not-allowed text-slate-400`}>
+          <Settings className="h-4 w-4" aria-hidden="true" />
+          <span className="flex-1">Settings</span>
+          <small className="text-[10px]">Coming soon</small>
+        </span>
+      </nav>
+
+      <div className="grid gap-3 border-t border-black/[0.07] pt-4">
+        {businesses.length > 1 ? (
+          <div className="grid gap-1.5">
+            <label htmlFor="logging-business" className="text-xs font-medium text-slate-500">
+              Business
+            </label>
+            <select
+              id="logging-business"
+              className={selectClass}
+              value={businessId}
+              disabled={busy || syncing}
+              onChange={(event) => changeBusiness(event.target.value)}
+            >
+              {businesses.map((business) => (
+                <option value={business.merchant_id} key={business.merchant_id}>
+                  {business.business_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="grid gap-0.5">
+            <span className="text-xs font-medium text-slate-500">Business</span>
+            <strong className="text-sm font-medium">
+              {selectedBusiness?.business_name ?? "No business available"}
+            </strong>
+          </div>
+        )}
+
+        {stores.length > 1 ? (
+          <div className="grid gap-1.5">
+            <label htmlFor="logging-store" className="text-xs font-medium text-slate-500">
+              Store
+            </label>
+            <select
+              id="logging-store"
+              className={selectClass}
+              value={storeId}
+              disabled={busy || syncing}
+              onChange={(event) => changeStore(event.target.value)}
+            >
+              {stores.map((store) => (
+                <option value={store.store_id} key={store.store_id}>
+                  {store.store_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="grid gap-0.5">
+            <span className="text-xs font-medium text-slate-500">Store</span>
+            <strong className="text-sm font-medium">
+              {selectedStore?.store_name ?? "No store available"}
+            </strong>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-auto grid gap-3 text-xs text-slate-600">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-black/[0.07] bg-white/70 px-3 py-2">
+          <span>{queue.length} waiting to sync</span>
+          {queue.length > 0 && (
             <button
               type="button"
-              className="logging-menu-button"
-              aria-label={menuOpen ? "Close app menu" : "Open app menu"}
-              aria-expanded={menuOpen}
-              aria-controls="logging-app-menu"
-              title={menuOpen ? "Close menu" : "Open menu"}
-              onClick={() => setMenuOpen((open) => !open)}
+              disabled={!online || syncing || busy}
+              onClick={() => void syncQueue()}
+              className="inline-flex items-center gap-1 font-medium text-[#4d7c0f] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <span />
-              <span />
-              <span />
+              <RefreshCw className={`h-3 w-3 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
+              {syncing ? "Syncing…" : "Retry sync"}
             </button>
-            {menuOpen && (
-              <nav className="logging-menu" id="logging-app-menu" aria-label="App navigation">
-                <Link href="/workspace" aria-current="page" onClick={() => setMenuOpen(false)}>
-                  Log a sale
-                </Link>
-                {online ? (
-                  <>
-                    <Link href="/workspace/dashboard#overview" onClick={() => setMenuOpen(false)}>Dashboard</Link>
-                    <Link href="/workspace/dashboard#revenue-chart" onClick={() => setMenuOpen(false)}>Reports</Link>
-                    <Link href="/workspace/dashboard#score-overview" onClick={() => setMenuOpen(false)}>Credit</Link>
-                    <Link href="/workspace/dashboard#insights" onClick={() => setMenuOpen(false)}>Insights</Link>
-                    <Link href="/workspace/dashboard#notifications-panel" onClick={() => setMenuOpen(false)}>Notifications</Link>
-                  </>
-                ) : (
-                  <>
-                    <span className="logging-menu-disabled" aria-disabled="true">Dashboard <small>Online only</small></span>
-                    <span className="logging-menu-disabled" aria-disabled="true">Reports <small>Online only</small></span>
-                    <span className="logging-menu-disabled" aria-disabled="true">Credit <small>Online only</small></span>
-                    <span className="logging-menu-disabled" aria-disabled="true">Insights <small>Online only</small></span>
-                    <span className="logging-menu-disabled" aria-disabled="true">Notifications <small>Online only</small></span>
-                  </>
-                )}
-                <span className="logging-menu-disabled" aria-disabled="true">Settings <small>Coming soon</small></span>
-              </nav>
-            )}
+          )}
+        </div>
+        {installPrompt && (
+          <button
+            type="button"
+            onClick={() => void installApp()}
+            className={`flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-sm font-medium text-[#0B0F19] transition hover:border-[#65a30d]/40 ${softShadow}`}
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+            Install app
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  /* -------------------------------- Layout -------------------------------- */
+
+  return (
+    <div className="flex h-dvh overflow-hidden bg-white text-[#0B0F19]">
+      {/* Desktop sidebar */}
+      <aside className="hidden w-72 shrink-0 border-r border-black/[0.07] bg-gradient-to-b from-white to-[#f7fee7] md:block">
+        {sidebar}
+      </aside>
+
+      {/* Mobile drawer */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button
+            type="button"
+            aria-label="Close app menu"
+            className="absolute inset-0 bg-black/25 backdrop-blur-sm"
+            onClick={() => setMenuOpen(false)}
+          />
+          <div
+            id="logging-app-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="App menu"
+            className="absolute inset-y-0 left-0 w-[85%] max-w-xs overflow-y-auto border-r border-black/[0.07] bg-gradient-to-b from-white to-[#f7fee7] shadow-[0_24px_64px_-16px_rgba(16,24,40,0.35)]"
+          >
+            <button
+              type="button"
+              aria-label="Close menu"
+              onClick={() => setMenuOpen(false)}
+              className="absolute right-3 top-4 flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-black/5"
+            >
+              <X className="h-5 w-5" aria-hidden="true" />
+            </button>
+            {sidebar}
           </div>
-          <Link href="/workspace" className="logging-brand" aria-label="ZakaScore app home">Z</Link>
-          <div>
-            <p className="logging-eyebrow">ZAKASCORE · BUSINESS LOG</p>
-            <h1>Log a sale</h1>
+        </div>
+      )}
+
+      {/* Chat column */}
+      <div className="relative isolate flex min-w-0 flex-1 flex-col">
+        {/* Soft lime ambience so the glass has something to catch */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+          <div className="absolute -right-24 -top-32 h-96 w-96 rounded-full bg-[#A3E635]/25 blur-[100px]" />
+          <div className="absolute -left-24 bottom-0 h-80 w-80 rounded-full bg-[#A3E635]/15 blur-[100px]" />
+        </div>
+
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-black/[0.07] bg-white/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
+            aria-label={menuOpen ? "Close app menu" : "Open app menu"}
+            aria-expanded={menuOpen}
+            aria-controls="logging-app-menu"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-[15px] font-semibold leading-tight tracking-tight">Log a sale</h1>
+            <p className="truncate text-xs text-slate-500">
+              {selectedStore ? `Logging to ${selectedStore.store_name}` : "No PWA-enabled store is available."}
+            </p>
           </div>
-          <div className="logging-header-actions">
-            {installPrompt && <button type="button" className="logging-install" onClick={() => void installApp()}>Install app</button>}
-            <span className={`connection-state${online ? " is-online" : ""}`}><i />{online ? "Online" : "Offline"}</span>
-          </div>
+
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.07] bg-white/80 px-2.5 py-1 text-xs text-slate-600 ${softShadow}`}
+          >
+            <i
+              className={`h-1.5 w-1.5 rounded-full ${online ? "bg-[#65a30d]" : "bg-amber-500"}`}
+              aria-hidden="true"
+            />
+            {online ? "Online" : "Offline"}
+          </span>
+
+          <button
+            type="button"
+            onClick={resetChat}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
+            aria-label="New sale"
+          >
+            <SquarePen className="h-5 w-5" aria-hidden="true" />
+          </button>
         </header>
 
-        <section className="logging-workspace">
-          <div className="logging-context">
-            {businesses.length > 1 && (
-              <>
-                <label htmlFor="logging-business">Business</label>
-                <select
-                  id="logging-business"
-                  value={businessId}
-                  disabled={busy || syncing}
-                  onChange={(event) => {
-                    const nextBusiness = businesses.find((business) => business.merchant_id === event.target.value);
-                    const nextStoreId = nextBusiness?.stores.find((store) => store.pwa_logging_enabled)?.store_id ?? "";
-                    setBusinessId(event.target.value);
-                    setStoreId(nextStoreId);
-                    saveCachedWorkspace({
-                      selected_merchant_id: event.target.value,
-                      selected_store_id: nextStoreId,
-                      businesses,
-                    });
-                    setQueue([]);
-                    queueRef.current = [];
-                    setDraft(null);
-                  }}
-                >
-                  {businesses.map((business) => (
-                    <option value={business.merchant_id} key={business.merchant_id}>{business.business_name}</option>
+        {/* Conversation */}
+        <div className="flex-1 overflow-y-auto">
+          <div
+            className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-6 sm:px-6"
+            role="log"
+            aria-live="polite"
+            aria-label="Sale logging conversation"
+          >
+            {showWelcome ? (
+              <div className="my-auto flex flex-col items-center py-10 text-center">
+                <BrandMark className="h-14 w-14 text-2xl" />
+                <h2 className="mt-6 text-2xl font-semibold tracking-tight sm:text-3xl">
+                  What did you sell?
+                </h2>
+                <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-600">{GREETING}</p>
+                <div className="mt-8 flex flex-wrap justify-center gap-2">
+                  {EXAMPLE_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      disabled={composerDisabled}
+                      onClick={() => {
+                        setEntry(prompt);
+                        textareaRef.current?.focus();
+                      }}
+                      className={`rounded-full border border-black/[0.08] bg-white/80 px-4 py-2 text-sm text-slate-700 backdrop-blur transition hover:border-[#65a30d]/40 hover:text-[#4d7c0f] disabled:cursor-not-allowed disabled:opacity-50 ${softShadow}`}
+                    >
+                      {prompt}
+                    </button>
                   ))}
-                </select>
-              </>
-            )}
-            {businesses.length <= 1 && (
-              <>
-                <span>Business</span>
-                <strong>{selectedBusiness?.business_name ?? "No business available"}</strong>
-              </>
-            )}
-            <label htmlFor="logging-store">Store</label>
-            {stores.length > 1 ? (
-              <select id="logging-store" value={storeId} disabled={busy || syncing} onChange={(event) => {
-                setStoreId(event.target.value);
-                saveCachedWorkspace({
-                  selected_merchant_id: businessId,
-                  selected_store_id: event.target.value,
-                  businesses,
-                });
-              }}>
-                {stores.map((store) => <option value={store.store_id} key={store.store_id}>{store.store_name}</option>)}
-              </select>
-            ) : <strong>{selectedStore?.store_name ?? "No store available"}</strong>}
-            <p>Sale details stay on this device until you confirm them.</p>
-          </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {messages.map((message) =>
+                  message.speaker === "you" ? (
+                    <div key={message.id} className="flex justify-end">
+                      <p
+                        className={`${limeGloss} max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed [overflow-wrap:anywhere]`}
+                      >
+                        {message.text}
+                      </p>
+                    </div>
+                  ) : (
+                    <div key={message.id} className="flex items-start gap-3">
+                      <BrandMark className="mt-0.5 h-8 w-8 text-sm" />
+                      <p className="max-w-[85%] pt-1 text-sm leading-relaxed text-[#0B0F19] [overflow-wrap:anywhere]">
+                        {message.text}
+                      </p>
+                    </div>
+                  ),
+                )}
 
-          <div className="logging-status-row">
-            <span>{selectedStore ? `Logging to ${selectedStore.store_name}` : "No PWA-enabled store is available."}</span>
-            <span className="logging-queue-status">
-              {queue.length} waiting to sync
-              {queue.length > 0 && (
+                {busy && (
+                  <div className="flex items-start gap-3">
+                    <BrandMark className="mt-0.5 h-8 w-8 text-sm" />
+                    <p className="animate-pulse pt-1 text-sm text-slate-500">Preparing your sale…</p>
+                  </div>
+                )}
+
+                {needsPayment && draft && (
+                  <div className="flex flex-wrap gap-2 sm:pl-11">
+                    {(["cash", "digital"] as const).map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => choosePayment(method)}
+                        className={`rounded-full border border-black/[0.08] bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#65a30d]/40 hover:text-[#4d7c0f] ${softShadow}`}
+                      >
+                        {method === "cash" ? "Cash" : "Digital"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {draftComplete && draft && draft.amount_zar !== null && (
+                  <div className="sm:pl-11">
+                    <section
+                      aria-label="Review sale"
+                      className={`max-w-md rounded-2xl p-5 ${glassPanel}`}
+                    >
+                      <p className="text-xs font-medium text-slate-500">Review sale</p>
+                      <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
+                        {formatAmount(draft.amount_zar)}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {draft.quantity ? `${draft.quantity} × ` : ""}
+                        {draft.offering_name ? `${draft.offering_name} · ` : ""}
+                        Paid by {draft.payment_method}
+                      </p>
+                      <p className="mt-3 text-xs text-slate-500">
+                        Not right? Send a new message with the correct details.
+                      </p>
+                      <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setDraft(null)}
+                          disabled={busy}
+                          className={`min-h-10 rounded-xl border border-black/10 bg-white px-4 text-sm font-medium text-[#0B0F19] transition hover:border-black/20 ${softShadow}`}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void confirmSale()}
+                          disabled={busy || !canLog}
+                          className={`${limeBtn} min-h-10 rounded-xl px-5 text-sm font-medium`}
+                        >
+                          {online ? "Confirm and record" : "Confirm and save offline"}
+                        </button>
+                      </div>
+                    </section>
+                  </div>
+                )}
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+        </div>
+
+        {/* Composer */}
+        <div className="shrink-0 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pb-4 pt-3 sm:px-6">
+          <div className="mx-auto w-full max-w-3xl">
+            <div className="mb-2 grid gap-2 empty:hidden">
+              {!online && (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
+                  You’re offline. Confirmed sales are stored on this device until you reconnect.
+                </p>
+              )}
+              {role === "viewer" && (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900" role="status">
+                  Your business role allows viewing but not logging sales.
+                </p>
+              )}
+              {stores.length === 0 && !appError && (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
+                  No store with an active PWA logging source is available for this business.
+                </p>
+              )}
+              {appError && (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900" role="alert">
+                  {appError}
+                </p>
+              )}
+              {modelError && (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900" role="alert">
+                  {modelError}
+                </p>
+              )}
+              {syncMessage && (
+                <p className="rounded-xl border border-black/[0.07] bg-white/80 px-3 py-2 text-xs text-slate-600" role="status">
+                  {syncMessage}
+                </p>
+              )}
+            </div>
+
+            <form
+              onSubmit={submitMessage}
+              className={`flex items-end gap-2 rounded-3xl border border-black/10 bg-white/85 p-2 pl-4 backdrop-blur-xl transition focus-within:border-[#65a30d]/40 focus-within:shadow-[0_0_0_4px_rgba(132,204,22,0.22),0_8px_24px_-8px_rgba(16,24,40,0.12)] ${deepShadow}`}
+            >
+              <label className="sr-only" htmlFor="sale-message">
+                Describe a sale
+              </label>
+              <textarea
+                id="sale-message"
+                ref={textareaRef}
+                rows={1}
+                value={entry}
+                maxLength={500}
+                disabled={composerDisabled}
+                onKeyDown={onComposerKeyDown}
+                onChange={(event) => {
+                  setEntry(event.target.value);
+                  event.target.style.height = "auto";
+                  event.target.style.height = `${Math.min(event.target.scrollHeight, 160)}px`;
+                }}
+                placeholder="Describe a sale: what you sold, the total in rand, and cash or digital…"
+                className="max-h-40 min-h-10 flex-1 resize-none bg-transparent py-2.5 text-sm leading-5 text-[#0B0F19] outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+              />
+              <button
+                type="submit"
+                aria-label="Send"
+                disabled={composerDisabled || !entry.trim()}
+                className={`${limeBtn} flex h-10 w-10 shrink-0 items-center justify-center rounded-full`}
+              >
+                <ArrowUp className="h-5 w-5" aria-hidden="true" />
+              </button>
+            </form>
+
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-xs text-slate-500">
+              {!modelReady && canLog && (
                 <button
                   type="button"
-                  disabled={!online || syncing || busy}
-                  onClick={() => void syncQueue()}
+                  disabled={modelLoading || !storeId}
+                  onClick={() => void loadAssistant()}
+                  className="font-medium text-[#4d7c0f] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {syncing ? "Syncing…" : "Retry sync"}
+                  {modelLoading ? "Loading assistant…" : "Load on-device assistant"}
                 </button>
               )}
-            </span>
+              <span className="max-w-full truncate">
+                {modelProgress ||
+                  "Runs on your device. The assistant’s first load downloads a local language model."}
+              </span>
+            </div>
           </div>
-
-          <div className="logging-conversation" aria-live="polite" aria-label="Sale logging conversation">
-            {messages.map((message) => (
-              <div className={`logging-message ${message.speaker}`} key={message.id}>
-                <span>{message.speaker === "assistant" ? "ZakaScore" : "You"}</span>
-                <p>{message.text}</p>
-              </div>
-            ))}
-            {busy && <p className="logging-thinking">Preparing your sale…</p>}
-          </div>
-
-          {draft && (
-            <form className="sale-confirmation" onSubmit={confirmSale}>
-              <div className="sale-confirmation-heading">
-                <span>REVIEW SALE</span>
-                <strong>{draft.amount_zar === null ? "Details needed" : formatAmount(draft.amount_zar)}</strong>
-              </div>
-              {draft.amount_zar !== null && draft.payment_method && (
-                <>
-                  <p>
-                    {draft.quantity ? `${draft.quantity} × ` : ""}
-                    {draft.offering_name ? `${draft.offering_name} · ` : ""}
-                    Paid by {draft.payment_method}.
-                  </p>
-                  <label htmlFor="confirm-amount">Total amount (ZAR)</label>
-                  <input
-                    id="confirm-amount"
-                    type="number"
-                    min="0.01"
-                    max="100000"
-                    step="0.01"
-                    value={draft.amount_zar}
-                    onChange={(event) => setDraft({ ...draft, amount_zar: Number(event.target.value) || null })}
-                    required
-                  />
-                  <label htmlFor="confirm-payment">Payment method</label>
-                  <select
-                    id="confirm-payment"
-                    value={draft.payment_method}
-                    onChange={(event) => setDraft({ ...draft, payment_method: event.target.value as PaymentMethod })}
-                  >
-                    <option value="cash">Cash</option>
-                    <option value="digital">Digital</option>
-                  </select>
-                  <div className="sale-confirmation-actions">
-                    <button type="button" className="logging-secondary" onClick={() => setDraft(null)}>Cancel</button>
-                    <button type="submit" className="logging-submit" disabled={busy || !canLog}>
-                      {online ? "Confirm and record" : "Confirm and save offline"}
-                    </button>
-                  </div>
-                </>
-              )}
-            </form>
-          )}
-
-          {modelReady && canLog && (
-            <form className="logging-input-row" onSubmit={submitMessage}>
-              <label className="visually-hidden" htmlFor="sale-message">Describe a sale</label>
-              <input
-                id="sale-message"
-                value={entry}
-                onChange={(event) => setEntry(event.target.value)}
-                placeholder="e.g. Sold 2 shirts for R300, cash"
-                maxLength={500}
-                disabled={busy || !storeId || !!draft && draft.amount_zar !== null && draft.payment_method !== null}
-              />
-              <button type="submit" className="logging-submit" disabled={busy || !entry.trim() || !!draft && draft.amount_zar !== null && draft.payment_method !== null}>Send</button>
-            </form>
-          )}
-
-          <div className="assistant-controls">
-            {!modelReady && canLog && (
-              <button type="button" className="logging-submit" disabled={modelLoading || !storeId} onClick={() => void loadAssistant()}>
-                {modelLoading ? "Loading assistant…" : "Load on-device assistant"}
-              </button>
-            )}
-            <p>{modelProgress || "The assistant runs on your device. Its first load downloads a local language model."}</p>
-            {modelError && <p className="logging-error" role="alert">{modelError}</p>}
-          </div>
-
-          <details className="manual-entry">
-            <summary>Enter sale details manually</summary>
-            <form onSubmit={submitManualSale}>
-              <label htmlFor="manual-amount">Total amount (ZAR)</label>
-              <input id="manual-amount" type="number" min="0.01" max="100000" step="0.01" required value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} />
-              <label htmlFor="manual-payment">Payment method</label>
-              <select id="manual-payment" value={manualPayment} onChange={(event) => setManualPayment(event.target.value as PaymentMethod)}>
-                <option value="cash">Cash</option>
-                <option value="digital">Digital</option>
-              </select>
-              <label htmlFor="manual-item">Offering (optional)</label>
-              <input id="manual-item" maxLength={60} value={manualItem} onChange={(event) => setManualItem(event.target.value)} />
-              <label htmlFor="manual-quantity">Quantity (optional)</label>
-              <input id="manual-quantity" type="number" min="1" max="1000" step="1" value={manualQuantity} onChange={(event) => setManualQuantity(event.target.value)} />
-              <button type="submit" className="logging-secondary" disabled={!canLog || !storeId}>Review sale</button>
-            </form>
-          </details>
-
-          {role === "viewer" && <p className="logging-error" role="status">Your business role allows viewing but not logging sales.</p>}
-          {appError && <p className="logging-error" role="alert">{appError}</p>}
-          {syncMessage && <p className="sync-message" role="status">{syncMessage}</p>}
-          {stores.length === 0 && !appError && <p className="logging-error">No store with an active PWA logging source is available for this business.</p>}
-
-          <footer className="logging-footer">
-            <span>{online ? "Sales sync securely to your authorized business." : "Confirmed sales are stored on this device until you reconnect."}</span>
-          </footer>
-        </section>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
