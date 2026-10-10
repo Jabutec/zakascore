@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/zakascore.png" alt="ZakaScore Logo" width="140">
+  <img src="frontend/public/logo.png" alt="ZakaScore Logo" width="140">
 </p>
 
 <h1 align="center">ZakaScore</h1>
