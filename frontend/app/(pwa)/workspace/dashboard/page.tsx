@@ -33,6 +33,38 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Hard stop for calls that can otherwise stall for minutes without ever failing
+// (the sign-in service can accept a connection and then never answer).
+const AUTH_TIMEOUT_MS = 12_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+// Temporary diagnostics: prints when a step starts and how long it took. If a step prints
+// "start" but never "done", that's where the page is stuck. Safe to delete later.
+async function timed<T>(label: string, run: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  console.log(`[dashboard] ${label}: start`);
+  try {
+    return await run();
+  } finally {
+    console.log(`[dashboard] ${label}: done in ${Date.now() - startedAt}ms`);
+  }
+}
+
 /*
   Neon Auth returns { data, error } rather than throwing, and its network calls
   can time out transiently. One retry smooths over those blips.
@@ -44,7 +76,7 @@ async function retryAuth<T extends { error: unknown }>(
   let result!: T;
   for (let i = 0; i < attempts; i++) {
     try {
-      result = await call();
+      result = await withTimeout(call(), AUTH_TIMEOUT_MS);
       if (!result.error) return result;
     } catch (error) {
       result = { data: null, error } as unknown as T;
@@ -116,14 +148,14 @@ async function getData<T>(
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const auth = getAuth();
-  const { data: session, error } = await retryAuth(() => auth.getSession());
+  const { data: session, error } = await timed("getSession", () => retryAuth(() => auth.getSession()));
   if (error) {
     return <AuthUnavailable />;
   }
   if (!session?.user?.id) {
     redirect(LOGIN_PATH);
   }
-  const { data: accessToken, error: tokenError } = await retryAuth(() => auth.token());
+  const { data: accessToken, error: tokenError } = await timed("auth token", () => retryAuth(() => auth.token()));
   if (tokenError) {
     return <AuthUnavailable />;
   }
@@ -140,25 +172,25 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const token = accessToken.token;
   const { business: requestedBusinessId } = await searchParams;
-  const workspace = await getData<BusinessList>(apiUrl, "/api/businesses", token);
+  const workspace = await timed("businesses", () => getData<BusinessList>(apiUrl, "/api/businesses", token));
   const selectedBusiness = requestedBusinessId
     ? workspace.businesses.find((business) => business.merchant_id === requestedBusinessId)
     : workspace.businesses.find(
-        (business) => business.merchant_id === workspace.selected_merchant_id,
-      );
+      (business) => business.merchant_id === workspace.selected_merchant_id,
+    );
   if (!selectedBusiness) {
     redirect(DASHBOARD_PATH);
   }
   const selectedMerchantId = selectedBusiness.merchant_id;
   const [transactions, revenue, topOfferings, overview, paymentMethods, creditScore] =
-    await Promise.all([
+    await timed("backend batch", () => Promise.all([
       getData<Transaction[]>(apiUrl, "/api/transactions", token, selectedMerchantId),
       getData<RevenuePoint[]>(apiUrl, "/api/revenue", token, selectedMerchantId),
       getData<Offering[]>(apiUrl, "/api/top-offerings", token, selectedMerchantId),
       getData<DashboardOverview>(apiUrl, "/api/overview", token, selectedMerchantId),
       getData<PaymentMethod[]>(apiUrl, "/api/payment-methods", token, selectedMerchantId),
       getData<CreditScore>(apiUrl, "/api/credit-score", token, selectedMerchantId),
-    ]);
+    ]));
 
   return (
     <DashboardView
