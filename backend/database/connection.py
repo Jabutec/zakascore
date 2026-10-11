@@ -39,11 +39,18 @@ def open_pool() -> None:
             min_size=POOL_MIN_SIZE,
             max_size=POOL_MAX_SIZE,
             kwargs={
-                "connect_timeout": 10,
+                "connect_timeout": 15,          # a little more room for Neon cold starts
                 "prepare_threshold": None,
+                # TCP keepalives so idle connections are noticed (and kept alive) early
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 3,
             },
-            max_idle=240,
-            max_lifetime=1800,
+            check=ConnectionPool.check_connection,  # runs a cheap test as each connection is borrowed
+            max_idle=60,                            # drop idle connections well before Neon does
+            max_lifetime=900,
+            reconnect_timeout=30,                   # keep retrying briefly if the database is waking up
             timeout=30,
             open=False,
         )
