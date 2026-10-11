@@ -72,7 +72,6 @@ interface DashboardViewProps {
   creditScore: CreditScore;
   businesses: Business[];
   selectedBusiness: Business;
-  pwaMode?: boolean;
 }
 
 const currency = new Intl.NumberFormat("en-ZA", {
@@ -198,7 +197,6 @@ export default function DashboardView({
   creditScore,
   businesses,
   selectedBusiness,
-  pwaMode = false,
 }: DashboardViewProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -209,7 +207,7 @@ export default function DashboardView({
   const [inviteError, setInviteError] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const dashboardPath = pwaMode ? "/workspace/dashboard" : "/dashboard";
+  const dashboardPath = "/workspace/dashboard";
 
   useEffect(() => {
     function showNotificationPanelFromHash() {
@@ -247,7 +245,7 @@ export default function DashboardView({
         setSignOutError(result.error.message || "Unable to sign out.");
         return;
       }
-      router.replace(pwaMode ? "/workspace" : "/login");
+      router.replace("/login");
       router.refresh();
     } catch {
       setSignOutError("Could not reach Neon Auth. Check your connection and try again.");
@@ -366,12 +364,10 @@ export default function DashboardView({
         </a>
         <div className="sidebar-label">WORKSPACE</div>
         <nav className="nav-list">
-          {pwaMode && (
-            <Link className="nav-link" href="/workspace" aria-label="Log a sale" title="Log a sale">
-              <Icon name="reports" />
-              <span>Log a sale</span>
-            </Link>
-          )}
+          <Link className="nav-link" href="/workspace" aria-label="Log a sale" title="Log a sale">
+            <Icon name="reports" />
+            <span>Log a sale</span>
+          </Link>
           {[
             ["overview", "Overview", "#overview"],
             ["merchants", "Business", "#business-portfolio"],

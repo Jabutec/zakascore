@@ -10,6 +10,24 @@ export function PwaRegister() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
+    // ADDED: development only. In `npm run dev` the worker's cache-first handling of
+    // /_next/static can serve stale CSS/JS (old styles coming back, unstyled pages).
+    // So in dev we never run the worker, and we remove any worker/caches left from
+    // earlier runs. Production builds behave exactly as before.
+    if (process.env.NODE_ENV !== "production") {
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => void registration.unregister());
+      });
+      if ("caches" in window) {
+        void caches.keys().then((keys) => {
+          keys
+            .filter((key) => key.startsWith("zakascore-pwa-"))
+            .forEach((key) => void caches.delete(key));
+        });
+      }
+      return;
+    }
+
     let disposed = false;
     const reloadAfterControl = () => {
       if (disposed || !navigator.serviceWorker.controller) return;

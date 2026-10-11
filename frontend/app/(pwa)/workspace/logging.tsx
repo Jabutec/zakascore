@@ -458,20 +458,34 @@ export default function LoggingApp() {
   useEffect(() => {
     let cancelled = false;
     const cachedWorkspace = loadCachedWorkspace();
-    async function loadStores() {
+
+    // Stale-while-revalidate: if this device already knows the workspace, show it
+    // instantly (no spinner, nothing to break) and refresh from the server quietly.
+    if (cachedWorkspace) {
+      const selection = workspaceSelection(cachedWorkspace);
+      setBusinesses(cachedWorkspace.businesses);
+      setBusinessId(selection.businessId);
+      setStoreId(selection.storeId);
+      setLoadingStores(false);
+    }
+
+    async function refreshStores() {
       try {
-        if (!navigator.onLine && cachedWorkspace) {
-          const selection = workspaceSelection(cachedWorkspace);
-          if (!cancelled) {
-            setBusinesses(cachedWorkspace.businesses);
-            setBusinessId(selection.businessId);
-            setStoreId(selection.storeId);
+        if (!navigator.onLine) {
+          if (cancelled) return;
+          if (cachedWorkspace) {
             setSyncMessage("Using the saved workspace. New sales will sync when you reconnect.");
+          } else {
+            setAppError("You’re offline and nothing is saved on this device yet. Connect once to load your stores.");
           }
           return;
         }
 
-        const response = await fetch("/api/backend/api/businesses", { cache: "no-store" });
+        // Patient on purpose: give a slow backend or a waking database plenty of time.
+        const response = await fetch("/api/backend/api/businesses", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(30000),
+        });
         if (response.status === 401) {
           if (!cancelled) setAuthNeeded(true);
           return;
@@ -492,6 +506,18 @@ export default function LoggingApp() {
         const result = data as { selected_merchant_id: string; businesses: Business[] };
         if (cancelled) return;
         setBusinesses(result.businesses);
+
+        // Keep the user's current selection if it's still valid; otherwise use the server's.
+        const latest = loadCachedWorkspace() ?? cachedWorkspace;
+        if (latest) {
+          const keep = workspaceSelection({ ...latest, businesses: result.businesses });
+          const stillValid =
+            keep.businessId === latest.selected_merchant_id && keep.storeId === latest.selected_store_id;
+          if (stillValid) {
+            saveCachedWorkspace({ ...latest, businesses: result.businesses });
+            return;
+          }
+        }
         const selectedBusiness =
           result.businesses.find((business) => business.merchant_id === result.selected_merchant_id) ??
           result.businesses[0];
@@ -508,20 +534,23 @@ export default function LoggingApp() {
         }
       } catch (error) {
         if (cancelled) return;
-        if (cachedWorkspace && (error instanceof TypeError || !navigator.onLine)) {
-          const selection = workspaceSelection(cachedWorkspace);
-          setBusinesses(cachedWorkspace.businesses);
-          setBusinessId(selection.businessId);
-          setStoreId(selection.storeId);
-          setSyncMessage("Using the saved workspace. New sales will sync when you reconnect.");
+        if (cachedWorkspace) {
+          // Already showing the saved workspace, so just let the user know quietly.
+          setSyncMessage("Couldn’t reach the server, so this is your saved workspace. Sales you log will sync when it’s back.");
         } else {
-          setAppError(error instanceof Error ? error.message : "Unable to load your stores.");
+          const isNetworkIssue =
+            error instanceof TypeError || (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError"));
+          setAppError(
+            isNetworkIssue || !(error instanceof Error)
+              ? "We couldn’t load your stores yet. Check your connection and refresh the page."
+              : error.message,
+          );
         }
       } finally {
         if (!cancelled) setLoadingStores(false);
       }
     }
-    void loadStores();
+    void refreshStores();
     return () => {
       cancelled = true;
     };
@@ -689,7 +718,10 @@ export default function LoggingApp() {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(transaction),
+          signal: AbortSignal.timeout(30000),
         });
+        // Server trouble (5xx): fall through to the offline queue instead of losing the sale
+        if (response.status >= 500) throw new Error("Server unavailable");
         if (!response.ok) {
           setAppError(await responseError(response));
           return;
@@ -714,7 +746,7 @@ export default function LoggingApp() {
       }
       if (!replaceQueue([...queueRef.current, transaction])) return;
       setDraft(null);
-      addMessage("assistant", "The connection was lost. Saved on this device and queued to sync.");
+      addMessage("assistant", "I couldn’t reach the server, so I saved this sale on your device. It will sync automatically.");
       setSyncMessage("Waiting for a connection to sync.");
     } finally {
       setBusy(false);
@@ -793,7 +825,7 @@ export default function LoggingApp() {
       <StateScreen
         title="Connect your business"
         text="Set up a business or join one with an invite code before recording sales."
-        href="/connect"
+        href="/workspace/connect"
         cta="Business setup"
       />
     );
