@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth/client";
+import { redeemConnectCode } from "@/lib/connect-code";
+import { AuthShell, ConnectCodeField, Field, FormAlert, limeButton, textLink } from "@/components/auth-ui";
 
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [code, setCode] = useState("");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,6 +36,19 @@ export default function LoginPage() {
         : nextPath && (nextPath === "/app" || nextPath.startsWith("/app/"))
           ? `/workspace${nextPath.slice(4)}`
           : "/workspace";
+
+      // Optional: join a business with a one-time connect code.
+      const connectCode = code.trim();
+      if (connectCode) {
+        const redeemed = await redeemConnectCode(connectCode);
+        if (!redeemed.ok) {
+          setError(
+            `You’re signed in, but the connect code could not be used (${redeemed.message}). Fix the code and try again, or clear it to continue.`,
+          );
+          return;
+        }
+      }
+
       router.replace(destination);
       router.refresh();
     } catch {
@@ -43,53 +59,28 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <section className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h1 className="mb-1 text-2xl font-semibold text-gray-900">ZakaScore</h1>
-        <p className="mb-6 text-sm text-gray-500">Sign in to your business account</p>
-
-        {error && (
-          <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block text-sm text-gray-700">
-            Email
-            <input
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2.5"
-            />
-          </label>
-          <label className="block text-sm text-gray-700">
-            Password
-            <input
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-2.5"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-gray-900 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {loading ? "Signing in..." : "Sign in"}
-          </button>
-        </form>
-        <p className="mt-5 text-center text-sm text-gray-600">
+    <AuthShell
+      title="Sign In to Your Account"
+      subtitle="Welcome back. Sign in to manage your business."
+      footer={
+        <>
           New to ZakaScore?{" "}
-          <Link href="/signup" className="font-medium text-gray-900 underline">
-            Create an account
+          <Link href="/signup" className={textLink}>
+            Create an Account
           </Link>
-        </p>
-      </section>
-    </main>
+        </>
+      }
+    >
+      {error && <FormAlert>{error}</FormAlert>}
+
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <Field label="Email" name="email" type="email" autoComplete="email" required />
+        <Field label="Password" name="password" type="password" autoComplete="current-password" required />
+        <ConnectCodeField value={code} onChange={setCode} />
+        <button type="submit" disabled={loading} className={limeButton}>
+          {loading ? "Signing In…" : "Sign In"}
+        </button>
+      </form>
+    </AuthShell>
   );
 }
