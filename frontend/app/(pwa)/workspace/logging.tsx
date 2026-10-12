@@ -69,7 +69,7 @@ type InstallPromptEvent = Event & {
 
 /* -------------------------------------------------------------------------- */
 /*  Design tokens                                                             */
-/*  ~60% white · ~30% glossy lime (same as the landing page) · ~10% black    */
+/*  ~60% white · ~30% lime (same as the landing page) · ~10% black    */
 /*  Lime #A3E635 fills carry dark text; #4d7c0f is the readable lime-toned    */
 /*  text colour on white. Headings: semibold only.                            */
 /* -------------------------------------------------------------------------- */
@@ -80,9 +80,10 @@ const softShadow =
 const deepShadow =
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_1px_rgba(16,24,40,0.04),0_2px_4px_rgba(16,24,40,0.04),0_8px_16px_-4px_rgba(16,24,40,0.06),0_24px_48px_-16px_rgba(16,24,40,0.12)]";
 
-/* Glossy lime: gradient + inset highlight + a faint gloss band on top half */
+/* Glossy lime button: gradient + inset top highlight + faint gloss band.
+   The shadow underneath is neutral grey, so no lime glow is cast onto the white. */
 const limeGloss =
-  "relative isolate overflow-hidden border border-[#65a30d]/40 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_1px_rgba(16,24,40,0.08),0_8px_20px_-6px_rgba(101,163,13,0.55)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-1/2 before:bg-gradient-to-b before:from-white/40 before:to-transparent";
+  "relative isolate overflow-hidden border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-1/2 before:bg-gradient-to-b before:from-white/40 before:to-transparent";
 
 const limeBtn = `${limeGloss} transition hover:brightness-105 active:brightness-95 disabled:cursor-not-allowed disabled:opacity-50`;
 
@@ -861,7 +862,7 @@ export default function LoggingApp() {
           href="/workspace"
           aria-current="page"
           onClick={() => setMenuOpen(false)}
-          className={`${navBase} border-[#65a30d]/15 bg-gradient-to-b from-[#f7fee7] to-white font-medium text-[#4d7c0f] ${softShadow}`}
+          className={`${navBase} border-[#65a30d]/15 bg-[#f7fee7] font-medium text-[#4d7c0f] ${softShadow}`}
         >
           <SquarePen className="h-4 w-4" aria-hidden="true" />
           Log a sale
@@ -990,7 +991,7 @@ export default function LoggingApp() {
   return (
     <div className="flex h-dvh overflow-hidden bg-white text-[#0B0F19]">
       {/* Desktop sidebar */}
-      <aside className="hidden w-72 shrink-0 border-r border-black/[0.07] bg-gradient-to-b from-white to-[#f7fee7] md:block">
+      <aside className="hidden w-72 shrink-0 border-r border-black/[0.07] bg-white md:block">
         {sidebar}
       </aside>
 
@@ -1008,7 +1009,7 @@ export default function LoggingApp() {
             role="dialog"
             aria-modal="true"
             aria-label="App menu"
-            className="absolute inset-y-0 left-0 w-[85%] max-w-xs overflow-y-auto border-r border-black/[0.07] bg-gradient-to-b from-white to-[#f7fee7] shadow-[0_24px_64px_-16px_rgba(16,24,40,0.35)]"
+            className="absolute inset-y-0 left-0 w-[85%] max-w-xs overflow-y-auto border-r border-black/[0.07] bg-white shadow-[0_24px_64px_-16px_rgba(16,24,40,0.35)]"
           >
             <button
               type="button"
@@ -1025,11 +1026,6 @@ export default function LoggingApp() {
 
       {/* Chat column */}
       <div className="relative isolate flex min-w-0 flex-1 flex-col">
-        {/* Soft lime ambience so the glass has something to catch */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-          <div className="absolute -right-24 -top-32 h-96 w-96 rounded-full bg-[#A3E635]/25 blur-[100px]" />
-          <div className="absolute -left-24 bottom-0 h-80 w-80 rounded-full bg-[#A3E635]/15 blur-[100px]" />
-        </div>
 
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-black/[0.07] bg-white/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
           <button
@@ -1229,7 +1225,7 @@ export default function LoggingApp() {
 
             <form
               onSubmit={submitMessage}
-              className={`flex items-end gap-2 rounded-3xl border border-black/10 bg-white/85 p-2 pl-4 backdrop-blur-xl transition focus-within:border-[#65a30d]/40 focus-within:shadow-[0_0_0_4px_rgba(132,204,22,0.22),0_8px_24px_-8px_rgba(16,24,40,0.12)] ${deepShadow}`}
+              className={`flex items-end gap-2 rounded-3xl border border-black/10 bg-white/85 p-2 pl-4 backdrop-blur-xl transition focus-within:border-[#65a30d]/60 focus-within:shadow-[0_0_0_2px_rgba(163,230,53,0.45)] ${deepShadow}`}
             >
               <label className="sr-only" htmlFor="sale-message">
                 Describe a sale

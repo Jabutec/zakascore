@@ -1,68 +1,81 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
-  Check,
-  Cpu,
-  Download,
-  LifeBuoy,
-  Lock,
+  ArrowRight,
+  BarChart3,
+  Banknote,
+  EyeOff,
+  FileQuestion,
   Mail,
   MessageCircle,
-  Upload,
-  Wallet,
+  Receipt,
+  ShieldCheck,
+  Smartphone,
+  Users,
+  WifiOff,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
-
+import { Reveal } from "@/components/reveal";
 
 const WHATSAPP_URL = "https://wa.me/27735347153";
 const SUPPORT_EMAIL = "support@zakascore.co.za";
+
+/* -------------------------------------------------------------------------- */
+/*  Look: white page, glossy lime buttons, hairline borders, neutral shadows. */
+/*  Lime #A3E635 for fills (dark text on top); #4d7c0f for lime-toned text.   */
+/* -------------------------------------------------------------------------- */
+
 const elevation =
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_1px_rgba(16,24,40,0.04),0_2px_4px_rgba(16,24,40,0.04),0_8px_16px_-4px_rgba(16,24,40,0.06),0_28px_56px_-18px_rgba(16,24,40,0.14)]";
 const elevationSm =
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_1px_rgba(16,24,40,0.05),0_4px_10px_-2px_rgba(16,24,40,0.07)]";
-const glass = `border border-black/[0.07] bg-gradient-to-b from-white/85 to-white/45 backdrop-blur-xl backdrop-saturate-150 ${elevation}`;
+const glass = `border border-black/[0.07] bg-gradient-to-b from-white/90 to-white/60 backdrop-blur-xl backdrop-saturate-150 ${elevation}`;
 const glassInner = `border border-black/[0.06] bg-gradient-to-b from-white/90 to-white/60 backdrop-blur-md ${elevationSm}`;
-const iconTile = `flex shrink-0 items-center justify-center rounded-xl border border-[#65a30d]/20 bg-gradient-to-b from-white to-[#ecfccb]/70 text-[#087F55] ${elevationSm}`;
+const iconTile = `flex shrink-0 items-center justify-center rounded-xl border border-[#65a30d]/20 bg-[#f7fee7] text-[#4d7c0f] ${elevationSm}`;
 const focusRing =
-  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#087F55]";
-const primaryBtn = `inline-flex items-center justify-center gap-2 rounded-xl border border-[#65a30d]/40 bg-gradient-to-b from-[#bef264] to-[#A3E635] px-6 py-3 text-sm font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_1px_rgba(16,24,40,0.08),0_8px_20px_-6px_rgba(101,163,13,0.55)] transition hover:brightness-105 active:brightness-95 ${focusRing}`;
-const outlineBtn = `inline-flex items-center justify-center gap-2 rounded-xl border border-black/10 bg-gradient-to-b from-white to-white/60 px-6 py-3 text-sm font-semibold text-[#0B0F19] backdrop-blur-md ${elevationSm} transition hover:border-[#65a30d]/50 hover:text-[#087F55] ${focusRing}`;
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4d7c0f]";
 
+const primaryBtn = `inline-flex items-center justify-center gap-2 rounded-xl border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] px-6 py-3 text-sm font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)] transition hover:brightness-105 active:brightness-95 ${focusRing}`;
+const outlineBtn = `inline-flex items-center justify-center gap-2 rounded-xl border border-black/10 bg-gradient-to-b from-white to-white/60 px-6 py-3 text-sm font-semibold text-[#0B0F19] ${elevationSm} transition hover:border-[#65a30d]/50 hover:text-[#4d7c0f] ${focusRing}`;
+const inkBtn = `inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B0F19] px-6 py-3 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(16,24,40,0.2)] transition hover:bg-[#1f2937] ${focusRing}`;
 
-function AmbientBackdrop() {
+function SectionHeading({ title, text }: { title: string; text?: string }) {
   return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[1200px] overflow-hidden"
-    >
-      <div className="absolute -left-32 -top-24 h-[520px] w-[520px] rounded-full bg-[#A3E635]/25 blur-[110px]" />
-      <div className="absolute -right-24 top-24 h-[480px] w-[480px] rounded-full bg-[#34d399]/20 blur-[110px]" />
-      <div className="absolute left-1/3 top-[560px] h-[420px] w-[420px] rounded-full bg-[#A3E635]/15 blur-[120px]" />
-      <div className="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_70%,white)]" />
+    <div className="max-w-2xl">
+      <h2 className="text-3xl font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">{title}</h2>
+      {text && <p className="mt-3 text-base leading-relaxed text-slate-600">{text}</p>}
     </div>
   );
 }
 
+/* -------------------------------- Navbar ---------------------------------- */
+
 function Navbar() {
   return (
-    <header className="sticky top-0 z-50 border-b border-black/[0.07] bg-white/70 backdrop-blur-xl backdrop-saturate-150 shadow-[0_1px_0_rgba(255,255,255,0.8),0_8px_24px_-12px_rgba(16,24,40,0.12)]">
-      <nav
-        aria-label="Main"
-        className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6"
-      >
-        <Link
-          href="/"
-          className={`rounded-md text-xl font-bold tracking-tight text-[#0B0F19] ${focusRing}`}
-        >
-          Zaka<span className="text-[#087F55]">Score</span>
+    <header className="sticky top-0 z-50 border-b border-black/[0.07] bg-white/80 backdrop-blur-xl backdrop-saturate-150">
+      <nav aria-label="Main" className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-4 sm:px-6">
+        <Link href="/" className={`rounded-md text-xl font-semibold tracking-tight text-[#0B0F19] ${focusRing}`}>
+          Zaka<span className="text-[#4d7c0f]">Score</span>
         </Link>
-        <Link href="/login" className={`${primaryBtn} !px-5 !py-2.5`}>
-          Launch App
-        </Link>
+
+        <div className="flex items-center gap-3 sm:gap-5">
+          <Link
+            href="/login"
+            className={`rounded-md text-sm font-medium text-[#0B0F19] transition hover:text-[#4d7c0f] ${focusRing}`}
+          >
+            Sign In
+          </Link>
+          <Link href="/signup" className={`${primaryBtn} !px-5 !py-2.5`}>
+            Get Started
+          </Link>
+        </div>
       </nav>
     </header>
   );
 }
+
+/* ------------------------------ Phone mockup ------------------------------ */
 
 function ScoreGauge({ score = 712 }: { score?: number }) {
   const pct = (score - 300) / 550;
@@ -76,13 +89,7 @@ function ScoreGauge({ score = 712 }: { score?: number }) {
             <stop offset="100%" stopColor="#A3E635" />
           </linearGradient>
         </defs>
-        <path
-          d="M 10 50 A 40 40 0 0 1 90 50"
-          fill="none"
-          stroke="#E5E7EB"
-          strokeWidth="8"
-          strokeLinecap="round"
-        />
+        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#E5E7EB" strokeWidth="8" strokeLinecap="round" />
         <path
           d="M 10 50 A 40 40 0 0 1 90 50"
           fill="none"
@@ -94,29 +101,21 @@ function ScoreGauge({ score = 712 }: { score?: number }) {
         />
       </svg>
       <div className="absolute inset-x-0 bottom-0 text-center">
-        <p className="text-4xl font-bold leading-none tabular-nums text-[#0B0F19]">
-          {score}
-        </p>
-        <p className="mt-1 text-xs font-semibold text-[#087F55]">Strong</p>
+        <p className="text-4xl font-semibold leading-none tabular-nums text-[#0B0F19]">{score}</p>
+        <p className="mt-1 text-xs font-semibold text-[#4d7c0f]">Strong</p>
       </div>
     </div>
   );
 }
 
-function ChatBubble({
-  from,
-  children,
-}: {
-  from: "you" | "ai";
-  children: ReactNode;
-}) {
+function ChatBubble({ from, children }: { from: "you" | "ai"; children: ReactNode }) {
   const isYou = from === "you";
   return (
     <div className={`flex ${isYou ? "justify-end" : "justify-start"}`}>
       <p
         className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-snug ${
           isYou
-            ? "rounded-br-sm border border-[#65a30d]/30 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_2px_6px_-2px_rgba(101,163,13,0.5)]"
+            ? "rounded-br-sm border border-[#65a30d]/40 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),0_1px_2px_rgba(16,24,40,0.1)]"
             : `rounded-bl-sm text-slate-700 ${glassInner}`
         }`}
       >
@@ -133,20 +132,18 @@ function PhoneMockup() {
       role="img"
       aria-label="ZakaScore app preview showing a credit score of 712 and a chat to log daily sales"
     >
-      <div
-        className={`rounded-[2.5rem] border border-black/[0.08] bg-gradient-to-b from-white/80 to-white/40 p-3 backdrop-blur-2xl backdrop-saturate-150 shadow-[inset_0_1px_0_rgba(255,255,255,1),0_2px_4px_rgba(16,24,40,0.05),0_16px_32px_-8px_rgba(16,24,40,0.12),0_48px_80px_-24px_rgba(16,24,40,0.25)]`}
-      >
+      <div className="rounded-[2.5rem] border border-black/[0.08] bg-gradient-to-b from-white/90 to-white/50 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,1),0_2px_4px_rgba(16,24,40,0.05),0_16px_32px_-8px_rgba(16,24,40,0.12),0_48px_80px_-24px_rgba(16,24,40,0.25)]">
         <div className="mx-auto mb-3 h-1.5 w-16 rounded-full bg-black/10" />
 
         <div className={`rounded-2xl p-4 ${glassInner}`}>
           <p className="text-xs text-slate-500">Alternative credit score</p>
           <ScoreGauge />
           <div className="mt-3 grid grid-cols-2 gap-2 text-center">
-            <div className="rounded-lg border border-black/[0.06] bg-white/70 py-2">
+            <div className="rounded-lg border border-black/[0.06] bg-white/80 py-2">
               <p className="text-sm font-semibold text-[#0B0F19]">R14 820</p>
               <p className="text-[10px] text-slate-500">Weekly turnover</p>
             </div>
-            <div className="rounded-lg border border-black/[0.06] bg-white/70 py-2">
+            <div className="rounded-lg border border-black/[0.06] bg-white/80 py-2">
               <p className="text-sm font-semibold text-[#0B0F19]">94%</p>
               <p className="text-[10px] text-slate-500">Logged days</p>
             </div>
@@ -155,9 +152,7 @@ function PhoneMockup() {
 
         <div className={`mt-3 space-y-2 rounded-2xl p-3 ${glassInner}`}>
           <ChatBubble from="you">Sold R1 250 airtime + R680 snacks today</ChatBubble>
-          <ChatBubble from="ai">
-            Logged R1 930. That’s your best Tuesday this month.
-          </ChatBubble>
+          <ChatBubble from="ai">Logged R1 930. That’s your best Tuesday this month.</ChatBubble>
           <div className="rounded-full border border-black/[0.08] bg-white/80 px-3 py-2 text-[11px] text-slate-400">
             Log a sale or upload a receipt…
           </div>
@@ -167,302 +162,410 @@ function PhoneMockup() {
   );
 }
 
+/* ------------------------------ 1. Hero ----------------------------------- */
+
 function Hero() {
   return (
-    <section className="mx-auto grid max-w-6xl items-center gap-14 px-4 py-16 sm:px-6 md:py-24 lg:grid-cols-2">
-      <div>
-        <h1 className="text-4xl font-bold leading-[1.1] tracking-tight text-[#0B0F19] sm:text-5xl lg:text-6xl">
-          Your hustle is your credit score.
+    <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 text-center sm:px-6 md:py-24 lg:grid-cols-2 lg:gap-14 lg:text-left">
+      <div className="motion-safe:animate-[rise_0.7s_cubic-bezier(0.22,0.61,0.36,1)_both]">
+        <h1 className="text-balance text-4xl font-semibold leading-[1.1] tracking-tight text-[#0B0F19] sm:text-5xl lg:text-6xl">
+          Your Hustle Is Your Credit Score.
         </h1>
-        <p className="mt-6 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
-          Turn your daily turnover, supplier receipts, and point-of-sale logs
-          into a professional credit profile. Powered by secure, zero-latency
-          on-device AI.
+        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg lg:mx-0">
+          Turn your daily sales into a credit profile that lenders and suppliers can trust. Log sales like a text
+          message, and let private on-device AI do the rest.
         </p>
-        <div className="mt-8">
-          <Link href="/login" className={primaryBtn}>
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Launch App &amp; Check Score
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center lg:justify-start">
+          <Link href="/signup" className={`${primaryBtn} w-full sm:w-auto`}>
+            Get Started
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Link>
-          <p className="mt-3 text-sm text-slate-500">
-            ⚡ Instantly loads offline. Fully private.
-          </p>
+          <Link href="/#how-it-works" className={`${outlineBtn} w-full sm:w-auto`}>
+            See How It Works
+          </Link>
         </div>
+        <p className="mt-4 text-sm text-slate-500">⚡ Loads instantly, even offline. Your messages stay on your device.</p>
       </div>
-      <PhoneMockup />
+
+      {/* On phones the mockup is cropped and faded at the bottom so it doesn't push the page down */}
+      <div className="relative mx-auto max-h-[430px] w-full overflow-hidden [-webkit-mask-image:linear-gradient(to_bottom,black_75%,transparent)] [mask-image:linear-gradient(to_bottom,black_75%,transparent)] motion-safe:animate-[rise_0.8s_cubic-bezier(0.22,0.61,0.36,1)_0.15s_both] md:max-h-none md:overflow-visible md:[-webkit-mask-image:none] md:[mask-image:none]">
+        <PhoneMockup />
+      </div>
     </section>
   );
 }
 
-const securityBadges: { icon: ReactNode; title: string; text: string }[] = [
+/* ---------------- Trust strip (sits where "companies" would go) ------------- */
+
+const trustPoints: { icon: LucideIcon; title: string; text: string }[] = [
+  { icon: Zap, title: "On-Device AI", text: "Your messages are read on your phone, not in the cloud." },
+  { icon: WifiOff, title: "Works Offline", text: "Log sales without data. They sync when you reconnect." },
+  { icon: ShieldCheck, title: "You Stay In Control", text: "Only the sales you confirm are saved to your account." },
+];
+
+function TrustStrip() {
+  return (
+    <section aria-label="Why people trust ZakaScore" className="px-4 sm:px-6">
+      <Reveal>
+        <ul
+          className={`mx-auto grid max-w-6xl divide-y divide-black/[0.07] rounded-2xl md:grid-cols-3 md:divide-x md:divide-y-0 ${glass}`}
+        >
+          {trustPoints.map(({ icon: Icon, title, text }) => (
+            <li key={title} className="flex items-start gap-3 p-6">
+              <span className={`h-10 w-10 ${iconTile}`}>
+                <Icon className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <p className="font-semibold text-[#0B0F19]">{title}</p>
+                <p className="text-sm text-slate-600">{text}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Reveal>
+    </section>
+  );
+}
+
+/* ------------------------ 2. Problem / agitation -------------------------- */
+
+const problems: { icon: LucideIcon; title: string; text: string }[] = [
   {
-    icon: <Lock className="h-5 w-5" aria-hidden="true" />,
-    title: "Zero Data Leakage",
-    text: "Your logs never leave your phone.",
+    icon: FileQuestion,
+    title: "No Payslip, No Credit",
+    text: "Lenders ask for payslips and formal statements. A trader, hairdresser or spaza owner often has neither, so the answer is no before anyone looks at the business.",
   },
   {
-    icon: <span aria-hidden="true">🇿🇦</span>,
-    title: "100% POPIA Compliant",
-    text: "Processed entirely client-side.",
+    icon: Receipt,
+    title: "Cash Leaves No Trail",
+    text: "Daily sales, airtime and stock purchases end up in your head or a notebook. Without a record, it is hard to prove how well the business really runs.",
   },
   {
-    icon: <Zap className="h-5 w-5" aria-hidden="true" />,
-    title: "WebGPU Accelerated",
-    text: "Lightning-fast, on-device local engine.",
+    icon: EyeOff,
+    title: "Sharing Your Numbers Feels Risky",
+    text: "Many tools want your sales and receipts on someone else’s servers. Your numbers are your business, and not everyone is comfortable handing them over.",
   },
 ];
 
-function SecurityBar() {
+function Problem() {
   return (
-    <section aria-label="Security and privacy" className="px-4 sm:px-6">
-      <ul
-        className={`mx-auto grid max-w-6xl divide-y divide-black/[0.07] rounded-2xl md:grid-cols-3 md:divide-x md:divide-y-0 ${glass}`}
-      >
-        {securityBadges.map((b) => (
-          <li key={b.title} className="flex items-start gap-3 p-6">
-            <span className={`h-10 w-10 text-lg ${iconTile}`}>{b.icon}</span>
-            <div>
-              <p className="font-semibold text-[#0B0F19]">{b.title}</p>
-              <p className="text-sm text-slate-600">{b.text}</p>
-            </div>
-          </li>
+    <section className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+      <Reveal>
+        <SectionHeading
+          title="Your Business Is Real. Your Paper Trail Isn’t."
+          text="Plenty of South African businesses are doing well and still get turned away. Here’s why."
+        />
+      </Reveal>
+      <ul className="mt-12 grid gap-6 md:grid-cols-3">
+        {problems.map(({ icon: Icon, title, text }, index) => (
+          <Reveal as="li" key={title} delay={index * 100} className={`rounded-2xl p-6 ${glass}`}>
+            <span className={`h-12 w-12 ${iconTile}`}>
+              <Icon className="h-6 w-6" aria-hidden="true" />
+            </span>
+            <h3 className="mt-5 text-lg font-semibold text-[#0B0F19]">{title}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">{text}</p>
+          </Reveal>
         ))}
       </ul>
     </section>
   );
 }
 
+/* ----------------------------- 3. Solution -------------------------------- */
+
+function CreditPassportCard() {
+  const signals = [
+    ["Revenue trend", "Growing"],
+    ["Cash-flow consistency", "Steady"],
+    ["Business activity", "Active"],
+  ];
+  return (
+    <div className={`mx-auto w-full max-w-md rounded-3xl p-6 ${glass}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-[#0B0F19]">ZakaScore</p>
+        <span className="rounded-full border border-black/[0.07] bg-white/80 px-2.5 py-1 text-xs text-slate-500">
+          Sample preview
+        </span>
+      </div>
+      <div className="mt-4">
+        <ScoreGauge score={712} />
+      </div>
+      <dl className="mt-6 divide-y divide-black/[0.07] border-t border-black/[0.07]">
+        {signals.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between py-3 text-sm">
+            <dt className="text-slate-600">{label}</dt>
+            <dd className="font-semibold text-[#0B0F19]">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function Solution() {
+  return (
+    <section id="solution" className="mx-auto grid max-w-6xl scroll-mt-24 items-center gap-14 px-4 py-24 sm:px-6 lg:grid-cols-2">
+      <Reveal>
+        <CreditPassportCard />
+      </Reveal>
+      <Reveal delay={120}>
+        <h2 className="text-3xl font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">
+          Turn Everyday Sales Into a Credit Profile That Speaks for You
+        </h2>
+        <p className="mt-4 text-base leading-relaxed text-slate-600">
+          Tell ZakaScore about each sale the way you would text a friend. It builds a clear picture of your revenue,
+          consistency and growth, then turns it into an Alternative Credit Score you can take to suppliers and
+          lenders.
+        </p>
+        <p className="mt-3 text-base leading-relaxed text-slate-600">
+          The AI that reads your messages runs on your own phone, so you are never feeding a cloud chatbot.
+        </p>
+        <div className="mt-8">
+          <Link href="/signup" className={primaryBtn}>
+            Check Your Score
+            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
+      </Reveal>
+    </section>
+  );
+}
+
+/* ----------------------- 4. Features / benefits --------------------------- */
+
+const features: { icon: LucideIcon; title: string; text: string }[] = [
+  {
+    icon: Banknote,
+    title: "Get Credit Without a Payslip",
+    text: "An Alternative Credit Score built from your real daily sales.",
+  },
+  {
+    icon: Smartphone,
+    title: "Log a Sale in Seconds",
+    text: "Type it like a text: “2 shirts, R300, cash”. Review it, confirm it, done.",
+  },
+  {
+    icon: WifiOff,
+    title: "Keep Trading Without Data",
+    text: "Installs like an app and works offline. Sales sync automatically when you reconnect.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Keep Your Messages Private",
+    text: "On-device AI reads what you type, so it never goes to a cloud chatbot.",
+  },
+  {
+    icon: BarChart3,
+    title: "See What Is Working",
+    text: "Revenue trends, top sellers and payment channels in one clean dashboard.",
+  },
+  {
+    icon: Users,
+    title: "Bring Your Team Along",
+    text: "Invite staff with one-time codes and keep every store in one place.",
+  },
+];
+
+function Features() {
+  return (
+    <section id="features" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-24 sm:px-6">
+      <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="lg:sticky lg:top-28 lg:self-start">
+          <Reveal>
+            <SectionHeading
+              title="Everything You Need to Get Credit-Ready"
+              text="Built for busy days on the floor, the street or the stall, not for accountants."
+            />
+            <div className="mt-8">
+              <Link href="/signup" className={outlineBtn}>
+                Get Started
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
+          </Reveal>
+        </div>
+
+        <ul className="grid gap-4 sm:grid-cols-2">
+          {features.map(({ icon: Icon, title, text }, index) => (
+            <Reveal as="li" key={title} delay={(index % 2) * 90} className="h-full">
+              <div
+                className={`h-full rounded-2xl p-5 motion-safe:transition motion-safe:duration-300 motion-safe:hover:-translate-y-0.5 ${glass}`}
+              >
+                <span className={`h-10 w-10 ${iconTile}`}>
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <h3 className="mt-4 text-base font-semibold text-[#0B0F19]">{title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{text}</p>
+              </div>
+            </Reveal>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+/* ---------------------------- 5. How it works ----------------------------- */
 
 const steps = [
   {
-    title: "Record your cash business",
-    text: "log your daily transactions by sending the a text. Money in, sales, and business activity",
+    title: "Record Your Cash Business",
+    text: "Log your daily transactions by sending a text. Money in, sales and business activity.",
   },
   {
-    title: "Build your financial profile",
-    text: "ZakaScore analyzes your cash history to understand revenue, transaction activity, consistency, stability, and growth.",
+    title: "Build Your Financial Profile",
+    text: "ZakaScore analyzes your cash history to understand revenue, transaction activity, consistency, stability and growth.",
   },
   {
-    
-    title: "Get your ZakaScore",
-    text: "Instantly download an Alternative Credit Score to unlock stock terms, supplier credit, or SMME funding.",
+    title: "Get Your ZakaScore",
+    text: "Instantly download an Alternative Credit Score to unlock stock terms, supplier credit or SMME funding.",
   },
 ];
+
+function ChatPreview() {
+  return (
+    <div className={`mx-auto w-full max-w-md rounded-3xl p-5 ${glass}`}>
+      <div className="space-y-3">
+        <ChatBubble from="you">Sold 3 airtime vouchers, R150 total, cash</ChatBubble>
+        <ChatBubble from="ai">I understood R150.00, paid cash. Is that right?</ChatBubble>
+        <div className={`rounded-2xl p-4 ${glassInner}`}>
+          <p className="text-xs text-slate-500">Review sale</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums text-[#0B0F19]">R150.00</p>
+          <p className="text-xs text-slate-500">3 × airtime voucher · Paid by cash</p>
+          <div className="mt-3 flex items-center justify-center rounded-xl border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] py-2 text-xs font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)]">
+            Confirm and Record
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function HowItWorks() {
   return (
-    <section id="how-it-works" className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
-      <h2 className="max-w-2xl text-3xl font-bold tracking-tight text-[#0B0F19] sm:text-4xl">
-        How Private On-Device AI Works
-      </h2>
-      <ol className="mt-12 grid gap-6 md:grid-cols-3">
-        {steps.map((s, i) => (
-          <li
-            key={s.title}
-            className={`rounded-2xl p-6 motion-safe:transition motion-safe:duration-300 motion-safe:hover:-translate-y-0.5 ${glass}`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="rounded-full border border-black/[0.07] bg-white/70 px-2.5 py-1 text-xs font-medium text-slate-500">
-                Step {i + 1}
+    <section id="how-it-works" className="mx-auto grid max-w-6xl scroll-mt-24 items-center gap-14 px-4 py-24 sm:px-6 lg:grid-cols-2">
+      <div>
+        <Reveal>
+          <SectionHeading title="From Daily Sales to Credit Score in 3 Steps" />
+        </Reveal>
+        <ol className="mt-10 space-y-8">
+          {steps.map((step, index) => (
+            <Reveal as="li" key={step.title} delay={index * 120} className="flex gap-4">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-sm font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)]">
+                {index + 1}
               </span>
-            </div>
-            <h3 className="mt-6 text-lg font-semibold text-[#0B0F19]">
-              {s.title}
-            </h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">
-              {s.text}
-            </p>
-          </li>
-        ))}
-      </ol>
+              <div>
+                <h3 className="text-lg font-semibold text-[#0B0F19]">{step.title}</h3>
+                <p className="mt-1 text-sm leading-relaxed text-slate-600">{step.text}</p>
+              </div>
+            </Reveal>
+          ))}
+        </ol>
+      </div>
+      <Reveal delay={150}>
+        <ChatPreview />
+      </Reveal>
     </section>
   );
 }
 
+/* -------------------------- 6. Objection handling ------------------------- */
 
-type Plan = {
-  name: string;
-  audience: string;
-  price: string;
-  features: string[];
-  cta: string;
-  href: string;
-  highlighted?: boolean;
-};
-
-const plans: Plan[] = [
+const objections: { icon: LucideIcon; title: string; text: string }[] = [
   {
-    name: "Free",
-    audience: "Solo Hustler",
-    price: "R0",
-    features: [
-      "1 connected store",
-      "Core local WebLLM financial intelligence",
-      "Standard monthly credit passport",
-      "100% POPIA secure local processing",
-    ],
-    cta: "Start Free",
-    href: "/login",
+    icon: ShieldCheck,
+    title: "Is My Data Safe?",
+    text: "The AI reads your messages on your own device, not on a cloud chatbot. Only the sale you confirm is saved to your account, and you review every sale before it is recorded.",
   },
   {
-    name: "Premium",
-    audience: "Growing Business",
-    price: "R99",
-    features: [
-      "Everything in Free",
-      "Unlimited multi-stores",
-      "Advanced deep-dive intelligence reports",
-      "Real-time credit score updates",
-      "Priority lender matching",
-    ],
-    cta: "Go Premium",
-    href: "/login",
-    highlighted: true,
+    icon: Smartphone,
+    title: "Do I Need Data or a New Phone?",
+    text: "ZakaScore installs like an app and keeps working offline. The on-device assistant needs a recent browser with WebGPU. Without it, you can still type your sales and review them before saving.",
+  },
+  {
+    icon: Banknote,
+    title: "Will Lenders Take It Seriously?",
+    text: "Your score comes from real sales history, so you can show a track record instead of a promise. Every lender decides for itself, so treat it as strong supporting evidence, not a guarantee.",
   },
 ];
 
-function PlanCard({ plan }: { plan: Plan }) {
+function Objections() {
   return (
-    <article
-      className={`relative flex flex-col rounded-2xl p-8 ${
-        plan.highlighted
-          ? "border border-[#84cc16] bg-gradient-to-b from-[#f7fee7]/95 to-white/60 backdrop-blur-xl backdrop-saturate-150 shadow-[0_0_0_4px_rgba(163,230,53,0.18),inset_0_1px_0_rgba(255,255,255,1),0_2px_4px_rgba(16,24,40,0.05),0_16px_32px_-8px_rgba(101,163,13,0.25),0_40px_72px_-24px_rgba(16,24,40,0.2)]"
-          : glass
-      }`}
-    >
-      {plan.highlighted && (
-        <span className="absolute -top-3 left-8 rounded-full border border-[#65a30d]/40 bg-gradient-to-b from-[#bef264] to-[#A3E635] px-3 py-1 text-xs font-semibold text-[#0B0F19] shadow-[0_2px_6px_-2px_rgba(101,163,13,0.6)]">
-          Most popular
-        </span>
-      )}
-      <h3 className="text-xl font-semibold text-[#0B0F19]">
-        {plan.name}{" "}
-        <span className="text-base font-normal text-slate-500">
-          / {plan.audience}
-        </span>
-      </h3>
-      <p className="mt-4 flex items-baseline gap-1">
-        <span className="text-5xl font-bold tracking-tight text-[#0B0F19]">
-          {plan.price}
-        </span>
-        <span className="text-slate-500">/month</span>
-      </p>
-      <ul className="mt-8 space-y-3 text-sm text-slate-700">
-        {plan.features.map((f) => (
-          <li key={f} className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#65a30d]/30 bg-[#ecfccb]">
-              <Check className="h-3 w-3 text-[#087F55]" aria-hidden="true" />
+    <section id="faq" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-24 sm:px-6">
+      <Reveal>
+        <SectionHeading title="Questions You Might Have" />
+      </Reveal>
+      <ul className="mt-12 grid gap-6 md:grid-cols-3">
+        {objections.map(({ icon: Icon, title, text }, index) => (
+          <Reveal as="li" key={title} delay={index * 100} className={`rounded-2xl p-6 ${glass}`}>
+            <span className={`h-10 w-10 ${iconTile}`}>
+              <Icon className="h-5 w-5" aria-hidden="true" />
             </span>
-            {f}
-          </li>
+            <h3 className="mt-4 text-lg font-semibold text-[#0B0F19]">{title}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">{text}</p>
+          </Reveal>
         ))}
       </ul>
-      <Link
-        href={plan.href}
-        className={`mt-10 ${plan.highlighted ? primaryBtn : outlineBtn}`}
-      >
-        {plan.cta}
-      </Link>
-    </article>
-  );
-}
 
-function Pricing() {
-  return (
-    <section id="pricing" className="mx-auto max-w-5xl px-4 py-24 sm:px-6">
-      <h2 className="text-3xl font-bold tracking-tight text-[#0B0F19] sm:text-4xl">
-        Simple pricing. Start free.
-      </h2>
-      <p className="mt-3 text-slate-600">
-        Upgrade when you add more stores or need lender matching.
-      </p>
-      <div className="mt-12 grid gap-8 md:grid-cols-2">
-        {plans.map((p) => (
-          <PlanCard key={p.name} plan={p} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function SupportCard({
-  icon,
-  title,
-  text,
-  action,
-}: {
-  icon: ReactNode;
-  title: string;
-  text: string;
-  action: ReactNode;
-}) {
-  return (
-    <article
-      className={`flex flex-col rounded-2xl p-6 motion-safe:transition motion-safe:duration-300 motion-safe:hover:-translate-y-0.5 ${glass}`}
-    >
-      <span className={`h-12 w-12 ${iconTile}`}>{icon}</span>
-      <h3 className="mt-5 text-lg font-semibold text-[#0B0F19]">{title}</h3>
-      <p className="mt-2 flex-1 text-sm leading-relaxed text-slate-600">
-        {text}
-      </p>
-      <div className="mt-6">{action}</div>
-    </article>
-  );
-}
-
-function Support() {
-  return (
-    <section id="support" className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
-      <h2 className="text-3xl font-bold tracking-tight text-[#0B0F19] sm:text-4xl">
-        We’ve Got Your Back
-      </h2>
-      <p className="mt-3 text-slate-600">
-        Real local support whenever you need it.
-      </p>
-
-      <div className="mt-12 grid gap-6 md:grid-cols-3">
-        <SupportCard
-          icon={<MessageCircle className="h-6 w-6" aria-hidden="true" />}
-          title="WhatsApp Support Chat"
-          text="Chat with our team instantly while out trading."
-          action={
-            <a
-              href={WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`${primaryBtn} w-full`}
-            >
+      <Reveal className="mt-6">
+        <div className={`flex flex-col gap-4 rounded-2xl p-6 sm:flex-row sm:items-center sm:justify-between ${glass}`}>
+          <div>
+            <p className="font-semibold text-[#0B0F19]">Still unsure? Talk to a real person.</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Chat with us on WhatsApp, or open a ticket from inside your dashboard if something misbehaves.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className={outlineBtn}>
+              <MessageCircle className="h-4 w-4" aria-hidden="true" />
               Open WhatsApp
             </a>
-          }
-        />
-        <SupportCard
-          icon={<Mail className="h-6 w-6" aria-hidden="true" />}
-          title="Email Support"
-          text="Need help managing multi-stores or premium billing?"
-          action={
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
-              className={`rounded-md font-semibold text-[#087F55] underline-offset-4 hover:underline ${focusRing}`}
+              className={`inline-flex items-center gap-2 rounded-md text-sm font-semibold text-[#4d7c0f] underline-offset-4 hover:underline ${focusRing}`}
             >
+              <Mail className="h-4 w-4" aria-hidden="true" />
               {SUPPORT_EMAIL}
             </a>
-          }
-        />
-        <SupportCard
-          icon={<LifeBuoy className="h-6 w-6" aria-hidden="true" />}
-          title="Diagnostic Ticket"
-          text="Browser acting up or WebGPU error? Open a ticket directly inside your active dashboard."
-          action={
-            <Link href="/login" className={`${outlineBtn} w-full`}>
-              Open Ticket
-            </Link>
-          }
-        />
-      </div>
+          </div>
+        </div>
+      </Reveal>
     </section>
   );
 }
+
+/* ----------------------------- 7. Final CTA ------------------------------- */
+
+function FinalCta() {
+  return (
+    <section className="px-4 pb-24 sm:px-6">
+      <Reveal>
+        <div className="mx-auto max-w-6xl rounded-[2rem] bg-[#A3E635] px-6 py-16 text-center sm:px-12 md:py-20">
+          <h2 className="mx-auto max-w-2xl text-3xl font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">
+            Your Hustle Deserves a Credit Score
+          </h2>
+          <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-[#0B0F19]/80">
+            Start logging sales today and build the track record that lenders and suppliers can see.
+          </p>
+          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <Link href="/signup" className={inkBtn}>
+              Get Started
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+            <Link
+              href="/login"
+              className={`rounded-md text-sm font-semibold text-[#0B0F19] underline-offset-4 hover:underline ${focusRing}`}
+            >
+              I Already Have an Account
+            </Link>
+          </div>
+        </div>
+      </Reveal>
+    </section>
+  );
+}
+
+/* ------------------------------- 8. Footer -------------------------------- */
 
 type FooterLink = { label: string; href: string; external?: boolean };
 
@@ -470,8 +573,8 @@ const footerColumns: { title: string; links: FooterLink[] }[] = [
   {
     title: "Product",
     links: [
-      { label: "How it works", href: "/#how-it-works" },
-      { label: "Pricing", href: "/#pricing" },
+      { label: "Features", href: "/#features" },
+      { label: "How It Works", href: "/#how-it-works" },
       { label: "Launch App", href: "/login" },
     ],
   },
@@ -487,7 +590,14 @@ const footerColumns: { title: string; links: FooterLink[] }[] = [
     title: "Company",
     links: [
       { label: "About", href: "/about" },
-      { label: "Contact", href: "/#support" },
+      { label: "FAQ", href: "/#faq" },
+    ],
+  },
+  {
+    title: "Support",
+    links: [
+      { label: "WhatsApp", href: WHATSAPP_URL, external: true },
+      { label: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}`, external: true },
     ],
   },
 ];
@@ -497,17 +607,12 @@ const legalLinks: FooterLink[] = [
   { label: "Terms of Service", href: "/terms" },
 ];
 
-const footerLinkClass = `rounded-md text-sm text-slate-600 transition hover:text-[#087F55] hover:underline underline-offset-4 ${focusRing}`;
+const footerLinkClass = `rounded-md text-sm text-slate-600 transition hover:text-[#4d7c0f] hover:underline underline-offset-4 ${focusRing}`;
 
 function FooterNavLink({ link }: { link: FooterLink }) {
   if (link.external) {
     return (
-      <a
-        href={link.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={footerLinkClass}
-      >
+      <a href={link.href} target="_blank" rel="noopener noreferrer" className={footerLinkClass}>
         {link.label}
       </a>
     );
@@ -521,33 +626,25 @@ function FooterNavLink({ link }: { link: FooterLink }) {
 
 function Footer() {
   return (
-    <footer className="border-t border-black/[0.07] bg-gradient-to-b from-white/60 to-[#f7fee7]/50 backdrop-blur-xl">
+    <footer className="border-t border-black/[0.07] bg-white">
       <div className="mx-auto max-w-6xl px-4 pb-8 pt-16 sm:px-6">
-        <div className="grid gap-12 lg:grid-cols-[1.4fr_2.6fr]">
-          {/* Brand */}
+        <div className="grid gap-12 lg:grid-cols-[1.2fr_2.8fr]">
           <div className="max-w-xs">
             <Link
               href="/"
-              className={`rounded-md text-xl font-bold tracking-tight text-[#0B0F19] ${focusRing}`}
+              className={`rounded-md text-xl font-semibold tracking-tight text-[#0B0F19] ${focusRing}`}
             >
-              Zaka<span className="text-[#087F55]">Score</span>
+              Zaka<span className="text-[#4d7c0f]">Score</span>
             </Link>
             <p className="mt-4 text-sm leading-relaxed text-slate-600">
-              Private, on-device credit scoring for South African small
-              businesses, traders, and hustlers.
+              Private, on-device credit scoring for South African small businesses, traders, and hustlers.
             </p>
           </div>
 
-          {/* Link columns */}
-          <nav
-            aria-label="Footer"
-            className="grid grid-cols-2 gap-8 sm:grid-cols-4"
-          >
+          <nav aria-label="Footer" className="grid grid-cols-2 gap-8 sm:grid-cols-4">
             {footerColumns.map((col) => (
               <div key={col.title}>
-                <h3 className="text-sm font-semibold text-[#0B0F19]">
-                  {col.title}
-                </h3>
+                <h3 className="text-sm font-semibold text-[#0B0F19]">{col.title}</h3>
                 <ul className="mt-4 space-y-3">
                   {col.links.map((link) => (
                     <li key={link.label}>
@@ -560,11 +657,8 @@ function Footer() {
           </nav>
         </div>
 
-        {/* Bottom bar */}
         <div className="mt-14 flex flex-col gap-4 border-t border-black/[0.07] pt-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            © {new Date().getFullYear()} ZakaScore. All rights reserved.
-          </p>
+          <p>© {new Date().getFullYear()} ZakaScore. All rights reserved.</p>
           <ul className="flex flex-wrap items-center gap-x-6 gap-y-2">
             {legalLinks.map((link) => (
               <li key={link.label}>
@@ -582,15 +676,17 @@ function Footer() {
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen overflow-x-clip bg-white font-sans text-[#0B0F19] antialiased">
-      <AmbientBackdrop />
+    <div className="min-h-screen overflow-x-clip bg-white font-sans text-[#0B0F19] antialiased">
       <Navbar />
       <main>
         <Hero />
-        <SecurityBar />
+        <TrustStrip />
+        <Problem />
+        <Solution />
+        <Features />
         <HowItWorks />
-        <Pricing />
-        <Support />
+        <Objections />
+        <FinalCta />
       </main>
       <Footer />
     </div>
