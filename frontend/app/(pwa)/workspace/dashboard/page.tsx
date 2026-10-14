@@ -202,6 +202,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       creditScore={creditScore}
       businesses={workspace.businesses}
       selectedBusiness={selectedBusiness}
+      userName={session.user.name}
     />
   );
 }

@@ -15,6 +15,7 @@ import {
   Menu,
   RefreshCw,
   Settings,
+  Share,
   SquarePen,
   X,
   type LucideIcon,
@@ -27,6 +28,8 @@ const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const MAX_QUEUED_TRANSACTIONS = 500;
 const QUEUE_PREFIX = "zakascore-pwa-queue:";
 const WORKSPACE_KEY = "zakascore-pwa-workspace";
+const INSTALL_DISMISS_KEY = "zakascore-pwa-install-dismissed";
+const INSTALL_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000; // ask again after a week
 
 type PaymentMethod = "cash" | "digital";
 type Role = "owner" | "admin" | "employee" | "viewer";
@@ -89,8 +92,9 @@ const limeBtn = `${limeGloss} transition hover:brightness-105 active:brightness-
 
 const glassPanel = `border border-black/[0.07] bg-gradient-to-b from-white/90 to-white/60 backdrop-blur-xl backdrop-saturate-150 ${deepShadow}`;
 
+// Mobile: taller tap targets (max-md:min-h-12)
 const navBase =
-  "flex min-h-10 w-full items-center gap-3 rounded-xl border border-transparent px-3 text-sm transition";
+  "flex min-h-10 w-full items-center gap-3 rounded-xl border border-transparent px-3 text-sm transition max-md:min-h-12";
 
 const selectClass =
   "w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-[#0B0F19] outline-none transition focus:border-[#65a30d]/50 disabled:opacity-60";
@@ -387,6 +391,11 @@ export default function LoggingApp() {
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [installed, setInstalled] = useState(false);
+  const [standalone, setStandalone] = useState(false);
+  const [isIos, setIsIos] = useState(false);
+  // Starts true so the card never flashes before we've checked localStorage.
+  const [installDismissed, setInstallDismissed] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const addMessage = useCallback((speaker: ChatMessage["speaker"], text: string) => {
@@ -446,15 +455,44 @@ export default function LoggingApp() {
       event.preventDefault();
       setInstallPrompt(event as InstallPromptEvent);
     };
+    const onInstalled = () => {
+      setInstallPrompt(null);
+      setInstalled(true);
+    };
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     window.addEventListener("beforeinstallprompt", onInstallPrompt);
+    window.addEventListener("appinstalled", onInstalled);
     return () => {
       window.removeEventListener("online", onOnline);
       window.removeEventListener("offline", onOffline);
       window.removeEventListener("beforeinstallprompt", onInstallPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
     };
   }, [syncQueue]);
+
+  // Work out whether the install card should be offered on this device.
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      const runningAsApp =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as Navigator & { standalone?: boolean }).standalone === true;
+      setStandalone(runningAsApp);
+      // iPhones and iPads never fire beforeinstallprompt, so show them the manual steps instead.
+      setIsIos(/iphone|ipad|ipod/i.test(navigator.userAgent));
+      try {
+        const last = Number(window.localStorage.getItem(INSTALL_DISMISS_KEY) ?? 0);
+        setInstallDismissed(Date.now() - last < INSTALL_SNOOZE_MS);
+      } catch {
+        setInstallDismissed(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -754,11 +792,26 @@ export default function LoggingApp() {
     }
   }
 
+  function dismissInstall() {
+    setInstallDismissed(true);
+    try {
+      window.localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now()));
+    } catch {
+      return;
+    }
+  }
+
   async function installApp() {
     if (!installPrompt) return;
-    await installPrompt.prompt();
-    const choice = await installPrompt.userChoice;
-    if (choice.outcome === "accepted") setInstallPrompt(null);
+    try {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      if (choice.outcome === "dismissed") dismissInstall();
+    } finally {
+      // A prompt event can only be used once. If the app is uninstalled later,
+      // the browser fires a fresh one on the next visit and the card returns.
+      setInstallPrompt(null);
+    }
   }
 
   function changeBusiness(nextBusinessId: string) {
@@ -801,6 +854,7 @@ export default function LoggingApp() {
   const needsPayment = !!draft && draft.amount_zar !== null && draft.payment_method === null;
   const showWelcome = messages.length <= 1 && !draft;
   const composerDisabled = busy || !storeId || !canLog;
+  const showInstallCard = !standalone && !installed && !installDismissed && (!!installPrompt || isIos);
 
   if (loadingStores) {
     return (
@@ -835,7 +889,7 @@ export default function LoggingApp() {
   /* ------------------------------- Sidebar -------------------------------- */
 
   const sidebar = (
-    <div className="flex h-full flex-col gap-5 p-4">
+    <div className="flex h-full flex-col gap-[clamp(1.25rem,5vw,1.5rem)] p-[clamp(1rem,5vw,1.5rem)] pt-[clamp(1.5rem,7vw,2rem)] md:gap-5 md:p-4">
       <Link
         href="/workspace"
         className="flex items-center gap-3 rounded-xl px-1 py-1"
@@ -851,7 +905,7 @@ export default function LoggingApp() {
       <button
         type="button"
         onClick={resetChat}
-        className={`${limeBtn} flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium`}
+        className={`${limeBtn} flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium max-md:min-h-12`}
       >
         <SquarePen className="h-4 w-4" aria-hidden="true" />
         New sale
@@ -976,7 +1030,7 @@ export default function LoggingApp() {
           <button
             type="button"
             onClick={() => void installApp()}
-            className={`flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-sm font-medium text-[#0B0F19] transition hover:border-[#65a30d]/40 ${softShadow}`}
+            className={`flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-sm font-medium text-[#0B0F19] transition hover:border-[#65a30d]/40 max-md:min-h-12 ${softShadow}`}
           >
             <Download className="h-4 w-4" aria-hidden="true" />
             Install app
@@ -990,6 +1044,63 @@ export default function LoggingApp() {
 
   return (
     <div className="flex h-dvh overflow-hidden bg-white text-[#0B0F19]">
+      {/* Floating install card (reappears if the app is uninstalled) */}
+      {showInstallCard && (
+        <div
+          role="dialog"
+          aria-label="Install ZakaScore"
+          className="pointer-events-none fixed inset-x-0 top-[4.5rem] z-30 px-[clamp(1rem,5vw,1.5rem)]"
+        >
+          <div
+            className={`pointer-events-auto mx-auto flex w-full max-w-md items-start gap-3 rounded-2xl p-4 md:mr-0 motion-safe:animate-[rise_0.4s_cubic-bezier(0.22,0.61,0.36,1)_both] ${glassPanel}`}
+          >
+            <span
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#65a30d]/20 bg-[#f7fee7] text-[#4d7c0f] ${softShadow}`}
+            >
+              <Download className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Install ZakaScore</p>
+              {installPrompt ? (
+                <>
+                  <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+                    Add it to your home screen to log sales faster, even offline.
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void installApp()}
+                      className={`${limeBtn} min-h-10 flex-1 rounded-xl px-4 text-sm font-medium`}
+                    >
+                      Install app
+                    </button>
+                    <button
+                      type="button"
+                      onClick={dismissInstall}
+                      className="min-h-10 rounded-xl px-3 text-sm font-medium text-slate-600 transition hover:bg-black/5"
+                    >
+                      Not now
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+                  Tap <Share className="inline h-3.5 w-3.5 align-[-2px]" aria-hidden="true" /> Share, then “Add to Home Screen”.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              aria-label="Dismiss"
+              onClick={dismissInstall}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-black/5"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Desktop sidebar */}
       <aside className="hidden w-72 shrink-0 border-r border-black/[0.07] bg-white md:block">
         {sidebar}
@@ -1027,7 +1138,7 @@ export default function LoggingApp() {
       {/* Chat column */}
       <div className="relative isolate flex min-w-0 flex-1 flex-col">
 
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-black/[0.07] bg-white/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
+        <header className="flex h-14 max-md:h-16 shrink-0 items-center gap-3 border-b border-black/[0.07] bg-white/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
           <button
             type="button"
             className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
@@ -1069,19 +1180,21 @@ export default function LoggingApp() {
         {/* Conversation */}
         <div className="flex-1 overflow-y-auto">
           <div
-            className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-4 py-6 sm:px-6"
+            className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-[clamp(1rem,5vw,1.25rem)] py-[clamp(1.5rem,8vw,2.5rem)] sm:px-6 md:py-6"
             role="log"
             aria-live="polite"
             aria-label="Sale logging conversation"
           >
             {showWelcome ? (
-              <div className="my-auto flex flex-col items-center py-10 text-center">
+              <div className="my-auto flex flex-col items-center py-[clamp(2rem,10vw,3.5rem)] text-center md:py-10">
                 <BrandMark className="h-14 w-14 text-2xl" />
-                <h2 className="mt-6 text-2xl font-semibold tracking-tight sm:text-3xl">
+                <h2 className="mt-6 text-[clamp(1.25rem,6vw,1.5rem)] font-semibold tracking-tight sm:text-3xl">
                   What did you sell?
                 </h2>
-                <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-600">{GREETING}</p>
-                <div className="mt-8 flex flex-wrap justify-center gap-2">
+                <p className="mt-2 max-w-md text-[clamp(0.8125rem,3.5vw,0.875rem)] leading-relaxed text-slate-600">
+                  {GREETING}
+                </p>
+                <div className="mt-[clamp(1.75rem,8vw,2rem)] flex flex-wrap justify-center gap-2 max-md:w-full max-md:max-w-sm max-md:flex-col max-md:gap-3">
                   {EXAMPLE_PROMPTS.map((prompt) => (
                     <button
                       key={prompt}
@@ -1091,7 +1204,7 @@ export default function LoggingApp() {
                         setEntry(prompt);
                         textareaRef.current?.focus();
                       }}
-                      className={`rounded-full border border-black/[0.08] bg-white/80 px-4 py-2 text-sm text-slate-700 backdrop-blur transition hover:border-[#65a30d]/40 hover:text-[#4d7c0f] disabled:cursor-not-allowed disabled:opacity-50 ${softShadow}`}
+                      className={`rounded-full border border-black/[0.08] bg-white/80 px-4 py-2 text-sm text-slate-700 backdrop-blur transition hover:border-[#65a30d]/40 hover:text-[#4d7c0f] disabled:cursor-not-allowed disabled:opacity-50 max-md:w-full max-md:py-3 max-md:text-[clamp(0.8125rem,3.5vw,0.875rem)] ${softShadow}`}
                     >
                       {prompt}
                     </button>
@@ -1099,7 +1212,7 @@ export default function LoggingApp() {
                 </div>
               </div>
             ) : (
-              <div className="grid gap-6">
+              <div className="grid gap-[clamp(1.25rem,6vw,1.5rem)]">
                 {messages.map((message) =>
                   message.speaker === "you" ? (
                     <div key={message.id} className="flex justify-end">
@@ -1127,14 +1240,14 @@ export default function LoggingApp() {
                 )}
 
                 {needsPayment && draft && (
-                  <div className="flex flex-wrap gap-2 sm:pl-11">
+                  <div className="flex flex-wrap gap-2 sm:pl-11 max-md:flex-col">
                     {(["cash", "digital"] as const).map((method) => (
                       <button
                         key={method}
                         type="button"
                         disabled={busy}
                         onClick={() => choosePayment(method)}
-                        className={`rounded-full border border-black/[0.08] bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#65a30d]/40 hover:text-[#4d7c0f] ${softShadow}`}
+                        className={`rounded-full border border-black/[0.08] bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#65a30d]/40 hover:text-[#4d7c0f] max-md:w-full max-md:py-3 ${softShadow}`}
                       >
                         {method === "cash" ? "Cash" : "Digital"}
                       </button>
@@ -1146,10 +1259,10 @@ export default function LoggingApp() {
                   <div className="sm:pl-11">
                     <section
                       aria-label="Review sale"
-                      className={`max-w-md rounded-2xl p-5 ${glassPanel}`}
+                      className={`max-w-md rounded-2xl p-[clamp(1.25rem,6vw,1.5rem)] md:p-5 ${glassPanel} max-md:max-w-none max-md:text-center`}
                     >
                       <p className="text-xs font-medium text-slate-500">Review sale</p>
-                      <p className="mt-1 text-3xl font-semibold tracking-tight tabular-nums">
+                      <p className="mt-1 text-[clamp(1.5rem,8vw,1.875rem)] font-semibold tracking-tight tabular-nums">
                         {formatAmount(draft.amount_zar)}
                       </p>
                       <p className="mt-1 text-sm text-slate-600">
@@ -1165,7 +1278,7 @@ export default function LoggingApp() {
                           type="button"
                           onClick={() => setDraft(null)}
                           disabled={busy}
-                          className={`min-h-10 rounded-xl border border-black/10 bg-white px-4 text-sm font-medium text-[#0B0F19] transition hover:border-black/20 ${softShadow}`}
+                          className={`min-h-10 rounded-xl border border-black/10 bg-white px-4 text-sm font-medium text-[#0B0F19] transition hover:border-black/20 max-md:min-h-12 max-md:w-full ${softShadow}`}
                         >
                           Cancel
                         </button>
@@ -1173,7 +1286,7 @@ export default function LoggingApp() {
                           type="button"
                           onClick={() => void confirmSale()}
                           disabled={busy || !canLog}
-                          className={`${limeBtn} min-h-10 rounded-xl px-5 text-sm font-medium`}
+                          className={`${limeBtn} min-h-10 rounded-xl px-5 text-sm font-medium max-md:min-h-12 max-md:w-full`}
                         >
                           {online ? "Confirm and record" : "Confirm and save offline"}
                         </button>
@@ -1188,7 +1301,7 @@ export default function LoggingApp() {
         </div>
 
         {/* Composer */}
-        <div className="shrink-0 bg-gradient-to-t from-white via-white/95 to-transparent px-4 pb-4 pt-3 sm:px-6">
+        <div className="shrink-0 bg-gradient-to-t from-white via-white/95 to-transparent px-[clamp(1rem,5vw,1.25rem)] pb-4 pt-3 sm:px-6 max-md:pt-4 max-md:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <div className="mx-auto w-full max-w-3xl">
             <div className="mb-2 grid gap-2 empty:hidden">
               {!online && (
@@ -1244,7 +1357,7 @@ export default function LoggingApp() {
                   event.target.style.height = `${Math.min(event.target.scrollHeight, 160)}px`;
                 }}
                 placeholder="Describe a sale: what you sold, the total in rand, and cash or digital…"
-                className="max-h-40 min-h-10 flex-1 resize-none bg-transparent py-2.5 text-sm leading-5 text-[#0B0F19] outline-none placeholder:text-slate-400 disabled:cursor-not-allowed"
+                className="max-h-40 min-h-10 flex-1 resize-none bg-transparent py-2.5 text-sm leading-5 text-[#0B0F19] outline-none placeholder:text-slate-400 disabled:cursor-not-allowed max-md:text-base"
               />
               <button
                 type="submit"
@@ -1256,7 +1369,7 @@ export default function LoggingApp() {
               </button>
             </form>
 
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-xs text-slate-500">
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-xs text-slate-500 max-md:flex-col max-md:gap-y-2">
               {!modelReady && canLog && (
                 <button
                   type="button"
@@ -1267,7 +1380,7 @@ export default function LoggingApp() {
                   {modelLoading ? "Loading assistant…" : "Load on-device assistant"}
                 </button>
               )}
-              <span className="max-w-full truncate">
+              <span className="max-w-full truncate max-md:whitespace-normal">
                 {modelProgress ||
                   "Runs on your device. The assistant’s first load downloads a local language model."}
               </span>
