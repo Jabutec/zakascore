@@ -332,10 +332,15 @@ button.nav-link {
   width: 32px;
 }
 
-/* Mobile-only controls (hidden on desktop; shown in the ≤760px block) */
-.menu-button,
-.sidebar-close,
+/* Mobile-only controls (hidden on desktop; shown in the ≤767px block) */
+.icon-button.menu-button,
+.icon-button.sidebar-close,
 .sidebar-backdrop {
+  display: none;
+}
+
+/* Search icon button: mobile only */
+.icon-button.search-toggle {
   display: none;
 }
 
@@ -404,7 +409,7 @@ button.nav-link {
   height: 40px;
   padding: 0 12px;
   transition: border-color 180ms var(--ease), box-shadow 180ms var(--ease);
-  width: 240px;
+  width: clamp(10rem, 22vw, 15rem);
 }
 
 .search-box:focus-within {
@@ -445,7 +450,6 @@ button.nav-link {
 
 .icon-button:hover {
   background: rgba(16, 24, 40, 0.05);
-  color: var(--foreground);
 }
 
 .live-dot {
@@ -474,7 +478,7 @@ button.nav-link {
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
-  width: 240px;
+  width: min(15rem, calc(100vw - 2rem));
   z-index: 8;
 }
 
@@ -492,10 +496,6 @@ button.nav-link {
 
 .profile-copy strong {
   color: var(--foreground);
-}
-
-.profile-copy span {
-  color: var(--muted);
 }
 
 /* ---------- Page head ---------- */
@@ -525,8 +525,7 @@ button.nav-link {
   margin: 0;
 }
 
-.page-description,
-.panel-description {
+.page-description {
   color: var(--muted);
   font-size: 13.5px;
   margin: 8px 0 0;
@@ -724,25 +723,42 @@ button.nav-link {
   font-weight: 600;
 }
 
+/* Progress tracks (shared shape; each has its own colours) */
 .score-track,
 .offering-track {
-  background: rgba(132, 204, 22, 0.14);
   border-radius: 99px;
   height: 5px;
   overflow: hidden;
 }
 
 .score-track {
+  background: rgba(132, 204, 22, 0.14);
   margin-top: 14px;
+}
+
+.offering-track {
+  background: #eef0f3;
 }
 
 .score-track span,
 .offering-track span {
-  background: var(--lime-strong);
   border-radius: inherit;
   display: block;
   height: 100%;
+}
+
+.score-track span {
+  background: var(--lime-strong);
   transition: width 900ms var(--ease);
+}
+
+.offering-track span {
+  background: #b8bfc9;
+  transition: width 900ms var(--ease);
+}
+
+.offering-track span.offering-highlight {
+  background: var(--lime-strong);
 }
 
 /* ---------- Analytics grid ---------- */
@@ -767,11 +783,17 @@ button.nav-link {
   min-height: 340px;
 }
 
-.panel-heading,
-.section-heading {
+.panel-heading {
   align-items: flex-start;
   display: flex;
   justify-content: space-between;
+}
+
+.section-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 
 .panel-heading .eyebrow,
@@ -791,8 +813,9 @@ button.nav-link {
 }
 
 .panel-description {
+  color: var(--muted);
   font-size: 12.5px;
-  margin-top: 5px;
+  margin: 5px 0 0;
 }
 
 .period-switch {
@@ -1076,11 +1099,6 @@ button.nav-link {
   padding-bottom: 10px;
 }
 
-.section-heading {
-  align-items: center;
-  margin-bottom: 16px;
-}
-
 .table-count {
   background: #f2f4f7;
   border-radius: 999px;
@@ -1123,7 +1141,6 @@ button.nav-link {
   font-size: 13px;
   padding: 13px 12px;
   white-space: nowrap;
-  transition: background-color 150ms var(--ease);
 }
 
 .data-table tbody tr {
@@ -1288,20 +1305,6 @@ button.nav-link {
   font-variant-numeric: tabular-nums;
 }
 
-.offering-track {
-  background: #eef0f3;
-  height: 5px;
-}
-
-.offering-track span {
-  background: #b8bfc9;
-  transition: width 900ms var(--ease);
-}
-
-.offering-track span.offering-highlight {
-  background: var(--lime-strong);
-}
-
 .empty-message {
   justify-content: flex-start;
   min-height: 60px;
@@ -1398,6 +1401,22 @@ button.nav-link {
   opacity: 0.55;
 }
 
+/* "New sale" button in the sidebar (same as the logging page nav).
+   Kept after .btn-lime so these sizing rules win. */
+.sidebar-new-sale {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin: 4px 0 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
 .form-error {
   background: #fff5f3;
   border: 1px solid #f4d0c9;
@@ -1459,6 +1478,7 @@ button.nav-link {
   .brand-name,
   .sidebar-label,
   .nav-link > span,
+  .sidebar-new-sale > span,
   .identity-copy {
     display: none;
   }
@@ -1493,25 +1513,32 @@ button.nav-link {
   }
 }
 
-/* ---------- Mobile: sidebar becomes a slide-in drawer ---------- */
+/* ======================================================================
+   Mobile (≤767px, the same cut-off as Tailwind's `max-md:` on the other
+   pages): the sidebar becomes a slide-in drawer and the page becomes a
+   single centred, spacious column.
+   ====================================================================== */
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .dashboard-main {
     margin-left: 0;
   }
 
-  .menu-button {
+  /* ----- Drawer ----- */
+
+  .icon-button.menu-button {
     display: inline-flex;
-    margin-left: -8px;
+    margin-left: -0.5rem;
   }
 
   .sidebar {
     box-shadow: none;
     overflow-y: auto;
-    padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    padding: clamp(1.5rem, 7vw, 2rem) clamp(1.25rem, 6vw, 1.5rem)
+      calc(clamp(1.5rem, 7vw, 2rem) + env(safe-area-inset-bottom, 0px));
     transform: translateX(-104%);
     transition: transform 280ms var(--ease), box-shadow 280ms var(--ease);
-    width: min(84vw, 300px);
+    width: min(84vw, 18.75rem);
     z-index: 30;
   }
 
@@ -1520,11 +1547,11 @@ button.nav-link {
     transform: translateX(0);
   }
 
-  .sidebar-close {
+  .icon-button.sidebar-close {
     display: inline-flex;
     position: absolute;
-    right: 12px;
-    top: 18px;
+    right: 0.75rem;
+    top: 1.125rem;
   }
 
   .sidebar-backdrop {
@@ -1543,7 +1570,7 @@ button.nav-link {
   /* Bring back the labels the tablet rail hides */
   .brand {
     justify-content: flex-start;
-    margin: 0 4px 28px;
+    margin: 0 0.25rem clamp(1.25rem, 6vw, 1.75rem);
   }
 
   .brand-name {
@@ -1556,11 +1583,12 @@ button.nav-link {
 
   .nav-link {
     justify-content: flex-start;
-    min-height: 46px;
-    padding: 0 12px;
+    min-height: 3rem;
+    padding: 0 0.75rem;
   }
 
-  .nav-link > span {
+  .nav-link > span,
+  .sidebar-new-sale > span {
     display: inline;
   }
 
@@ -1570,151 +1598,387 @@ button.nav-link {
 
   .sidebar-identity {
     justify-content: flex-start;
-    padding: 16px 6px 0;
+    padding: 1rem 0.375rem 0;
   }
+
+  /* ----- Header: menu + title + search icon + bell on row one ----- */
 
   .topbar {
-    padding: 0 20px;
+    flex-wrap: wrap;
+    gap: 0.625rem 0.25rem;
+    height: auto;
+    min-height: 4rem;
+    padding: clamp(0.75rem, 3vw, 1rem) clamp(1rem, 5vw, 1.5rem);
   }
 
-  .page-content {
-    padding: 28px 20px 20px;
+  .topbar-left {
+    flex: 1 1 auto; /* pushes the icons to the right */
   }
 
-  .metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .analytics-grid,
-  .lower-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .intelligence-panel {
-    min-height: 260px;
+  .breadcrumb > span {
+    display: none; /* show only "Overview" */
   }
 
   .topbar-actions {
-    gap: 10px;
+    display: contents; /* its children join the topbar's own flex row */
   }
 
+  .icon-button.search-toggle {
+    display: inline-flex;
+  }
+
+  /* Search is an icon on mobile; tapping it reveals the field on its own row */
   .search-box {
-    width: 180px;
+    display: none;
+    flex: 1 1 100%;
+    order: 3;
+    width: 100%;
+  }
+
+  .search-box.open {
+    display: flex;
+  }
+
+  .search-box input {
+    font-size: 1rem; /* stops iOS zoom on focus */
+  }
+
+  .profile-button {
+    display: none; /* identity lives in the drawer */
+  }
+
+  .notification-menu {
+    position: static;
+  }
+
+  .notifications-panel {
+    left: clamp(1rem, 5vw, 1.5rem);
+    margin-top: 0.5rem;
+    right: clamp(1rem, 5vw, 1.5rem);
+    top: 100%;
+    width: auto;
+  }
+
+  /* ----- Page frame: fluid width + padding, centred ----- */
+
+  .page-content {
+    display: grid;
+    gap: clamp(1.25rem, 6vw, 1.75rem);
+    margin-inline: auto;
+    max-width: min(100%, 40rem);
+    padding: clamp(1.5rem, 8vw, 2.5rem) clamp(1rem, 6vw, 1.5rem) clamp(3rem, 16vw, 5rem);
+    width: 100%;
+  }
+
+  .page-content > * {
+    min-width: 0;
+  }
+
+  /* The grid gap does the spacing, so drop the desktop margins */
+  .page-heading,
+  .metric-grid,
+  .analytics-grid,
+  .intelligence-strip,
+  .portfolio-panel {
+    margin-bottom: 0;
+  }
+
+  .team-invite-panel {
+    margin-top: 0;
+  }
+
+  /* ----- Heading ----- */
+
+  .page-heading {
+    align-items: center;
+    flex-direction: column;
+    gap: clamp(0.75rem, 4vw, 1rem);
+    text-align: center;
+  }
+
+  .page-heading h1 {
+    font-size: clamp(1.625rem, 7vw, 1.75rem);
+  }
+
+  .page-description {
+    font-size: clamp(0.8125rem, 3.6vw, 0.875rem);
+    margin-inline: auto;
+    max-width: min(100%, 20rem);
+  }
+
+  .eyebrow {
+    font-size: 0.6875rem;
+  }
+
+  .report-date {
+    justify-content: center;
+  }
+
+  /* ----- Grids: everything is one column, except the four headline cards ----- */
+
+  .analytics-grid,
+  .lower-grid,
+  .signal-grid {
+    gap: clamp(0.875rem, 4vw, 1.25rem);
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
+    gap: clamp(0.625rem, 3vw, 0.75rem);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* ----- Headline cards (two per row) ----- */
+
+  .metric-card {
+    min-height: 0;
+    padding: clamp(1rem, 4.5vw, 1.125rem) clamp(0.625rem, 3vw, 0.75rem);
+    text-align: center;
+  }
+
+  .metric-label {
+    flex-wrap: wrap;
+    font-size: clamp(0.6875rem, 3.2vw, 0.75rem);
+    gap: 0.375rem;
+    justify-content: center;
+  }
+
+  .metric-value {
+    font-size: clamp(1.125rem, 5.4vw, 1.5rem);
+  }
+
+  .metric-footnote {
+    flex-wrap: wrap;
+    font-size: clamp(0.625rem, 2.9vw, 0.6875rem);
+    gap: 0.125rem 0.375rem;
+    justify-content: center;
+  }
+
+  .score-card {
+    min-height: 0;
+  }
+
+  /* ----- Panels ----- */
+
+  .panel,
+  .chart-panel,
+  .intelligence-panel,
+  .intelligence-strip,
+  .portfolio-panel,
+  .composition-panel {
+    padding: clamp(1.25rem, 5vw, 1.5rem) clamp(1rem, 5vw, 1.25rem);
+  }
+
+  .chart-panel,
+  .intelligence-panel {
+    min-height: 0;
+  }
+
+  .intelligence-panel {
+    text-align: center;
+  }
+
+  .panel-heading,
+  .section-heading,
+  .strip-heading {
+    align-items: center;
+    flex-direction: column;
+    gap: clamp(0.75rem, 3.5vw, 0.875rem);
+    text-align: center;
+  }
+
+  .panel h2 {
+    font-size: clamp(1.125rem, 5.4vw, 1.25rem);
+  }
+
+  .panel-description,
+  .strip-note,
+  .table-count {
+    font-size: clamp(0.75rem, 3.4vw, 0.8125rem);
+  }
+
+  .period-switch {
+    align-self: center;
+  }
+
+  /* The plot box owns the chart height (the SVG fills it) */
+  .chart-plot {
+    height: clamp(9rem, 48vw, 12.5rem);
+  }
+
+  .chart-legend {
+    justify-content: center;
+    margin-left: 0;
+  }
+
+  .intelligence-topline,
+  .insight-link {
+    justify-content: center;
+  }
+
+  .insight-link {
+    margin-inline: auto;
+  }
+
+  /* Signals: one per row, with a divider on top instead of on the left */
+  .signal-grid {
+    gap: 0.875rem;
+  }
+
+  .signal-item:nth-child(n) {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 0.875rem 0 0;
+    text-align: center;
+  }
+
+  .signal-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  /* ----- Business performance table becomes a stacked card ----- */
+
+  .portfolio-panel .table-scroll {
+    overflow: visible;
+  }
+
+  .portfolio-panel .data-table,
+  .portfolio-panel .data-table tbody,
+  .portfolio-panel .data-table tr,
+  .portfolio-panel .data-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .portfolio-panel .data-table {
+    min-width: 0;
+  }
+
+  .portfolio-panel .data-table thead {
+    display: none;
+  }
+
+  .portfolio-panel .data-table tr {
+    padding: 0.5rem 0;
+  }
+
+  .portfolio-panel .data-table td,
+  .portfolio-panel .data-table td:first-child {
+    align-items: center;
+    border: 0;
+    display: flex;
+    font-size: clamp(0.8125rem, 3.8vw, 0.875rem);
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .portfolio-panel .data-table td[data-label]::before {
+    color: #64748b;
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    text-align: left;
+  }
+
+  /* ----- Recent activity: stays a normal table, scaled with the screen ----- */
+
+  .activity-panel {
+    padding: clamp(1.125rem, 5vw, 1.375rem) clamp(0.75rem, 3.5vw, 0.875rem);
+  }
+
+  .activity-table {
+    min-width: 0;
+  }
+
+  .activity-table th {
+    font-size: clamp(0.5rem, 2.4vw, 0.5625rem);
+    letter-spacing: 0.04em;
+    padding: 0.5rem 0.25rem;
+  }
+
+  .activity-table td,
+  .activity-table td:first-child {
+    font-size: clamp(0.6875rem, 3.2vw, 0.75rem);
+    padding: 0.625rem 0.25rem;
+    white-space: normal;
+  }
+
+  .activity-table th:first-child,
+  .activity-table td:first-child {
+    padding-left: 0;
+  }
+
+  .activity-table th:last-child,
+  .activity-table td:last-child {
+    padding-right: 0;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .activity-table td:nth-child(2) {
+    white-space: nowrap;
+  }
+
+  .activity-table .transaction-cell {
+    gap: 0.5rem;
+  }
+
+  .activity-table .transaction-mark {
+    height: clamp(1.25rem, 6vw, 1.5rem);
+    width: clamp(1.25rem, 6vw, 1.5rem);
+  }
+
+  .activity-table .transaction-cell strong {
+    font-size: clamp(0.6875rem, 3.2vw, 0.75rem);
+    max-width: 100%;
+  }
+
+  .activity-table .transaction-cell small {
+    font-size: clamp(0.5625rem, 2.7vw, 0.625rem);
+    line-height: 1.35;
+  }
+
+  .activity-table td.empty-row {
+    height: auto;
+    padding: 1.5rem 0.5rem;
+    text-align: center;
+  }
+
+  .offering-copy {
+    font-size: clamp(0.8125rem, 3.8vw, 0.875rem);
+  }
+
+  /* ----- Team invite + footer ----- */
+
+  .team-invite-panel {
+    align-items: center;
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .team-invite-panel .btn-lime {
+    max-width: min(100%, 20rem);
+    min-height: 3rem;
+    width: 100%;
+  }
+
+  .page-footer {
+    align-items: center;
+    flex-direction: column;
+    font-size: 0.75rem;
+    gap: 0.375rem;
+    text-align: center;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar {
     transition: none;
-  }
-}
-
-@media (max-width: 520px) {
-  .topbar {
-    height: 60px;
-    padding: 0 14px;
-  }
-
-  .breadcrumb > span:first-child,
-  .breadcrumb-divider,
-  .profile-copy {
-    display: none;
-  }
-
-  .profile-button {
-    border-left: 0;
-    padding-left: 0;
-  }
-
-  .search-box {
-    height: 36px;
-    width: min(34vw, 130px);
-  }
-
-  .topbar-actions {
-    gap: 6px;
-  }
-
-  .page-content {
-    padding: 24px 14px 16px;
-  }
-
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .page-heading h1 {
-    font-size: 26px;
-  }
-
-  .metric-grid {
-    gap: 10px;
-  }
-
-  .metric-card {
-    min-height: 128px;
-    padding: 16px 14px;
-  }
-
-  .score-card {
-    min-height: 184px;
-  }
-
-  .metric-value {
-    font-size: 26px;
-  }
-
-  .metric-footnote {
-    flex-wrap: wrap;
-  }
-
-  .chart-panel,
-  .intelligence-panel,
-  .intelligence-strip,
-  .portfolio-panel,
-  .activity-panel,
-  .composition-panel {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .chart-panel {
-    min-height: 300px;
-  }
-
-  .chart-plot {
-    height: 150px;
-  }
-
-  .signal-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    row-gap: 16px;
-  }
-
-  .signal-item:nth-child(odd) {
-    border-left: 0;
-    padding-left: 0;
-  }
-
-  .signal-item:nth-child(4) {
-    border-left: 1px solid var(--border);
-    padding-left: 14px;
-  }
-
-  .strip-heading {
-    align-items: flex-start;
-    gap: 10px;
-  }
-
-  .strip-note {
-    max-width: 130px;
-    text-align: right;
-  }
-
-  .page-footer {
-    gap: 8px;
   }
 }
 

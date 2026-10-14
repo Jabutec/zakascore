@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -72,6 +72,7 @@ interface DashboardViewProps {
   creditScore: CreditScore;
   businesses: Business[];
   selectedBusiness: Business;
+  userName?: string | null;
 }
 
 const currency = new Intl.NumberFormat("en-ZA", {
@@ -138,6 +139,8 @@ function Icon({ name, size = 19 }: { name: string; size?: number }) {
       return <svg {...common}><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
     case "close":
       return <svg {...common}><path d="M6 6l12 12M18 6 6 18" /></svg>;
+    case "log":
+      return <svg {...common}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>;
     default:
       return null;
   }
@@ -197,7 +200,9 @@ export default function DashboardView({
   creditScore,
   businesses,
   selectedBusiness,
+  userName,
 }: DashboardViewProps) {
+  const firstName = userName?.trim().split(/\s+/)[0] ?? "";
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState<7 | 30 | 0>(30);
@@ -207,6 +212,8 @@ export default function DashboardView({
   const [inviteError, setInviteError] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const dashboardPath = "/workspace/dashboard";
 
   useEffect(() => {
@@ -236,6 +243,11 @@ export default function DashboardView({
       document.body.classList.remove("menu-open");
     };
   }, [menuOpen]);
+
+  // Mobile: focus the search field when it is revealed.
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
 
   async function signOut() {
     setSignOutError("");
@@ -362,19 +374,24 @@ export default function DashboardView({
           </span>
           <span className="brand-name">Zaka<span>Score</span></span>
         </a>
+
+        <Link className="btn-lime sidebar-new-sale" href="/workspace">
+          <Icon name="log" size={17} />
+          <span>New sale</span>
+        </Link>
+
         <div className="sidebar-label">WORKSPACE</div>
         <nav className="nav-list">
           <Link className="nav-link" href="/workspace" aria-label="Log a sale" title="Log a sale">
-            <Icon name="reports" />
+            <Icon name="log" />
             <span>Log a sale</span>
           </Link>
           {[
-            ["overview", "Overview", "#overview"],
-            ["merchants", "Business", "#business-portfolio"],
-            ["data", "Financial data", "#financial-data"],
-            ["scores", "Scores", "#score-overview"],
-            ["insights", "Insights", "#insights"],
+            ["overview", "Dashboard", "#overview"],
             ["reports", "Reports", "#revenue-chart"],
+            ["scores", "Credit", "#score-overview"],
+            ["insights", "Insights", "#insights"],
+            ["bell", "Notifications", "#notifications-panel"],
           ].map(([icon, label, href], index) => (
             <a
               className={`nav-link${index === 0 ? " active" : ""}`}
@@ -422,9 +439,23 @@ export default function DashboardView({
             <div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-divider">/</span><strong>Overview</strong></div>
           </div>
           <div className="topbar-actions">
-            <label className="search-box">
+            <button
+              type="button"
+              className="icon-button search-toggle"
+              aria-label={searchOpen ? "Close search" : "Search recent transactions"}
+              aria-expanded={searchOpen}
+              aria-controls="dashboard-search"
+              onClick={() => {
+                if (searchOpen) setQuery("");
+                setSearchOpen((open) => !open);
+              }}
+            >
+              <Icon name={searchOpen ? "close" : "search"} size={18} />
+            </button>
+            <label className={`search-box${searchOpen ? " open" : ""}`} id="dashboard-search">
               <Icon name="search" size={17} />
               <input
+                ref={searchInputRef}
                 type="search"
                 aria-label="Search recent transactions"
                 placeholder="Search recent transactions"
@@ -462,11 +493,7 @@ export default function DashboardView({
         <div className="page-content">
           <section className="page-heading">
             <div>
-              <p className="eyebrow">FINANCIAL INTELLIGENCE</p>
-              <h1>Overview</h1>
-              <p className="page-description">
-                {selectedBusiness.business_name} · All {selectedBusiness.stores.length} {selectedBusiness.stores.length === 1 ? "store" : "stores"} · A clear view of business performance and financial health.
-              </p>
+              <h1>Welcome back{firstName ? `, ${firstName}` : ""}</h1>
             </div>
             <div className="report-date">
               {businesses.length > 1 ? (
@@ -596,13 +623,13 @@ export default function DashboardView({
                   <th>Business</th><th>ZakaScore</th><th>Revenue</th><th>Transactions</th><th>Average transaction</th><th>Score change</th><th>Status</th>
                 </tr></thead>
                 <tbody><tr>
-                  <td><div className="business-cell"><span className="business-mark">B</span><span><strong>{selectedBusiness.business_name}</strong><small>{selectedBusiness.stores.map((store) => store.store_name).join(", ") || "No stores yet"}</small></span></div></td>
-                  <td><strong className="score-cell">{score === null ? "—" : score.toFixed(0)}</strong></td>
-                  <td>{formatCurrency(overview.total_revenue)}</td>
-                  <td>{overview.transaction_count.toLocaleString("en-ZA")}</td>
-                  <td>{formatCurrency(overview.average_transaction)}</td>
-                  <td className="muted-cell">Not yet tracked</td>
-                  <td><span className={`status-pill${overview.activity_status === "active" ? " status-active" : ""}`}><span />{businessStatus}</span></td>
+                  <td data-label="Business"><div className="business-cell"><span className="business-mark">B</span><span><strong>{selectedBusiness.business_name}</strong><small>{selectedBusiness.stores.map((store) => store.store_name).join(", ") || "No stores yet"}</small></span></div></td>
+                  <td data-label="ZakaScore"><strong className="score-cell">{score === null ? "—" : score.toFixed(0)}</strong></td>
+                  <td data-label="Revenue">{formatCurrency(overview.total_revenue)}</td>
+                  <td data-label="Transactions">{overview.transaction_count.toLocaleString("en-ZA")}</td>
+                  <td data-label="Average transaction">{formatCurrency(overview.average_transaction)}</td>
+                  <td data-label="Score change" className="muted-cell">Not yet tracked</td>
+                  <td data-label="Status"><span className={`status-pill${overview.activity_status === "active" ? " status-active" : ""}`}><span />{businessStatus}</span></td>
                 </tr></tbody>
               </table>
             </div>
@@ -620,10 +647,10 @@ export default function DashboardView({
                   <tbody>
                     {filteredTransactions.slice(0, 8).map((transaction) => (
                       <tr key={transaction.transaction_id}>
-                        <td><div className="transaction-cell"><span className="transaction-mark"><Icon name="data" size={16} /></span><span><strong>{transaction.offering_name ?? "Business transaction"}</strong><small>{transaction.store_name} · {titleCase(transaction.input_type)} · Ref. {transaction.transaction_id.slice(0, 8)}</small></span></div></td>
-                        <td>{formatDate(transaction.transaction_date)}</td>
-                        <td>{transaction.quantity ?? "—"}</td>
-                        <td><strong>{formatCurrency(transaction.amount_zar)}</strong></td>
+                        <td data-label="Transaction"><div className="transaction-cell"><span className="transaction-mark"><Icon name="data" size={16} /></span><span><strong>{transaction.offering_name ?? "Business transaction"}</strong><small>{transaction.store_name} · {titleCase(transaction.input_type)} · Ref. {transaction.transaction_id.slice(0, 8)}</small></span></div></td>
+                        <td data-label="Date">{formatDate(transaction.transaction_date)}</td>
+                        <td data-label="Units">{transaction.quantity ?? "—"}</td>
+                        <td data-label="Amount"><strong>{formatCurrency(transaction.amount_zar)}</strong></td>
                       </tr>
                     ))}
                     {filteredTransactions.length === 0 && (

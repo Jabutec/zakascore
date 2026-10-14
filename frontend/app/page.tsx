@@ -36,15 +36,20 @@ const iconTile = `flex shrink-0 items-center justify-center rounded-xl border bo
 const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4d7c0f]";
 
+/* Fluid spacing helpers. Every clamp() maxes out at the old desktop value,
+   so large screens look the same and phones scale smoothly. */
+const gutter = "px-[clamp(1rem,5vw,1.5rem)] sm:px-6";
+const sectionY = "py-[clamp(2.5rem,10vw,4rem)] md:py-24";
+
 const primaryBtn = `inline-flex items-center justify-center gap-2 rounded-xl border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] px-6 py-3 text-sm font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)] transition hover:brightness-105 active:brightness-95 ${focusRing}`;
 const outlineBtn = `inline-flex items-center justify-center gap-2 rounded-xl border border-black/10 bg-gradient-to-b from-white to-white/60 px-6 py-3 text-sm font-semibold text-[#0B0F19] ${elevationSm} transition hover:border-[#65a30d]/50 hover:text-[#4d7c0f] ${focusRing}`;
 const inkBtn = `inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B0F19] px-6 py-3 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(16,24,40,0.2)] transition hover:bg-[#1f2937] ${focusRing}`;
 
 function SectionHeading({ title, text }: { title: string; text?: string }) {
   return (
-    <div className="max-w-2xl">
-      <h2 className="text-3xl font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">{title}</h2>
-      {text && <p className="mt-3 text-base leading-relaxed text-slate-600">{text}</p>}
+    <div className="max-w-2xl max-md:mx-auto max-md:text-center">
+      <h2 className="text-[clamp(1.5rem,6vw,1.875rem)] font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">{title}</h2>
+      {text && <p className="mt-3 text-[clamp(0.9375rem,4vw,1rem)] leading-relaxed text-slate-600">{text}</p>}
     </div>
   );
 }
@@ -54,7 +59,7 @@ function SectionHeading({ title, text }: { title: string; text?: string }) {
 function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-black/[0.07] bg-white/80 backdrop-blur-xl backdrop-saturate-150">
-      <nav aria-label="Main" className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 px-4 sm:px-6">
+      <nav aria-label="Main" className={`mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 ${gutter}`}>
         <Link href="/" className={`rounded-md text-xl font-semibold tracking-tight text-[#0B0F19] ${focusRing}`}>
           Zaka<span className="text-[#4d7c0f]">Score</span>
         </Link>
@@ -66,7 +71,7 @@ function Navbar() {
           >
             Sign In
           </Link>
-          <Link href="/signup" className={`${primaryBtn} !px-5 !py-2.5`}>
+          <Link href="/signup" className={`${primaryBtn} !px-[clamp(0.875rem,4vw,1.25rem)] !py-2.5 !text-[clamp(0.8125rem,3.5vw,0.875rem)]`}>
             Get Started
           </Link>
         </div>
@@ -81,7 +86,7 @@ function ScoreGauge({ score = 712 }: { score?: number }) {
   const pct = (score - 300) / 550;
   const arc = 126;
   return (
-    <div className="relative mx-auto h-28 w-48">
+    <div className="relative mx-auto aspect-[12/7] w-full max-w-48">
       <svg viewBox="0 0 100 56" className="h-full w-full" aria-hidden="true">
         <defs>
           <linearGradient id="zs-gauge" x1="0" y1="0" x2="1" y2="0">
@@ -128,7 +133,7 @@ function ChatBubble({ from, children }: { from: "you" | "ai"; children: ReactNod
 function PhoneMockup() {
   return (
     <div
-      className="relative mx-auto w-[280px] sm:w-[300px]"
+      className="relative mx-auto w-full max-w-[17.5rem] sm:max-w-[18.75rem]"
       role="img"
       aria-label="ZakaScore app preview showing a credit score of 712 and a chat to log daily sales"
     >
@@ -166,29 +171,35 @@ function PhoneMockup() {
 
 function Hero() {
   return (
-    <section className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 text-center sm:px-6 md:py-24 lg:grid-cols-2 lg:gap-14 lg:text-left">
+    <section
+      className={`mx-auto grid max-w-6xl items-center gap-[clamp(1.5rem,6vw,2.5rem)] ${gutter} py-[clamp(3rem,12vw,4rem)] text-center md:py-16 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-12 lg:py-20 lg:text-left`}
+    >
       <div className="motion-safe:animate-[rise_0.7s_cubic-bezier(0.22,0.61,0.36,1)_both]">
-        <h1 className="text-balance text-4xl font-semibold leading-[1.1] tracking-tight text-[#0B0F19] sm:text-5xl lg:text-6xl">
-          Your Hustle Is Your Credit Score.
+        <h1 className="text-balance text-[clamp(1.75rem,7.5vw,2.25rem)] font-semibold leading-[1.1] tracking-tight text-[#0B0F19] sm:text-[clamp(2.25rem,5.5vw,3rem)] lg:text-[clamp(2.5rem,3.8vw,3.5rem)]">
+          Turn Your Sales Into Financial Intelligence and Credit Potential
         </h1>
-        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg lg:mx-0">
-          Turn your daily sales into a credit profile that lenders and suppliers can trust. Log sales like a text
-          message, and let private on-device AI do the rest.
+        <p className="mx-auto mt-[clamp(1rem,4vw,1.5rem)] max-w-xl text-[clamp(0.9375rem,3.8vw,1rem)] leading-relaxed text-slate-600 sm:text-base lg:mx-0 lg:text-[1.0625rem]">
+          Track every sale, understand your business performance, and build an alternative credit score all in one simple app. Get financial intelligence from your daily transactions, discover your top-performing offerings, monitor revenue trends, and build a clearer picture of your business's financial activity. 
         </p>
-        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-center lg:justify-start">
-          <Link href="/signup" className={`${primaryBtn} w-full sm:w-auto`}>
+        <div className="mt-[clamp(1.5rem,6vw,2rem)] flex flex-row justify-center gap-3 sm:items-center lg:justify-start max-md:mx-auto max-md:max-w-md">
+          <Link
+            href="/signup"
+            className={`${primaryBtn} min-w-0 flex-1 !px-[clamp(0.75rem,3.5vw,1.5rem)] !text-[clamp(0.8125rem,3.6vw,0.875rem)] sm:flex-none`}
+          >
             Get Started
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
           </Link>
-          <Link href="/#how-it-works" className={`${outlineBtn} w-full sm:w-auto`}>
+          <Link
+            href="/#how-it-works"
+            className={`${outlineBtn} min-w-0 flex-1 !px-[clamp(0.75rem,3.5vw,1.5rem)] !text-[clamp(0.8125rem,3.6vw,0.875rem)] sm:flex-none`}
+          >
             See How It Works
           </Link>
         </div>
-        <p className="mt-4 text-sm text-slate-500">⚡ Loads instantly, even offline. Your messages stay on your device.</p>
       </div>
 
-      {/* On phones the mockup is cropped and faded at the bottom so it doesn't push the page down */}
-      <div className="relative mx-auto max-h-[430px] w-full overflow-hidden [-webkit-mask-image:linear-gradient(to_bottom,black_75%,transparent)] [mask-image:linear-gradient(to_bottom,black_75%,transparent)] motion-safe:animate-[rise_0.8s_cubic-bezier(0.22,0.61,0.36,1)_0.15s_both] md:max-h-none md:overflow-visible md:[-webkit-mask-image:none] md:[mask-image:none]">
+      {/* Hidden on phones; shown from md up */}
+      <div className="relative mx-auto hidden w-full motion-safe:animate-[rise_0.8s_cubic-bezier(0.22,0.61,0.36,1)_0.15s_both] md:block">
         <PhoneMockup />
       </div>
     </section>
@@ -205,13 +216,13 @@ const trustPoints: { icon: LucideIcon; title: string; text: string }[] = [
 
 function TrustStrip() {
   return (
-    <section aria-label="Why people trust ZakaScore" className="px-4 sm:px-6">
+    <section aria-label="Why people trust ZakaScore" className={gutter}>
       <Reveal>
         <ul
           className={`mx-auto grid max-w-6xl divide-y divide-black/[0.07] rounded-2xl md:grid-cols-3 md:divide-x md:divide-y-0 ${glass}`}
         >
           {trustPoints.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="flex items-start gap-3 p-6">
+            <li key={title} className="flex items-start gap-3 p-6 max-md:flex-col max-md:items-center max-md:p-[clamp(1.5rem,7vw,2rem)] max-md:text-center">
               <span className={`h-10 w-10 ${iconTile}`}>
                 <Icon className="h-5 w-5" aria-hidden="true" />
               </span>
@@ -249,17 +260,17 @@ const problems: { icon: LucideIcon; title: string; text: string }[] = [
 
 function Problem() {
   return (
-    <section className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
+    <section className={`mx-auto max-w-6xl ${gutter} ${sectionY}`}>
       <Reveal>
         <SectionHeading
           title="Your Business Is Real. Your Paper Trail Isn’t."
           text="Plenty of South African businesses are doing well and still get turned away. Here’s why."
         />
       </Reveal>
-      <ul className="mt-12 grid gap-6 md:grid-cols-3">
+      <ul className="mt-[clamp(2rem,8vw,3rem)] grid gap-[clamp(1rem,5vw,1.5rem)] md:grid-cols-3 max-md:mx-auto max-md:max-w-md">
         {problems.map(({ icon: Icon, title, text }, index) => (
-          <Reveal as="li" key={title} delay={index * 100} className={`rounded-2xl p-6 ${glass}`}>
-            <span className={`h-12 w-12 ${iconTile}`}>
+          <Reveal as="li" key={title} delay={index * 100} className={`rounded-2xl p-[clamp(1.25rem,6vw,2rem)] md:p-6 ${glass} max-md:text-center`}>
+            <span className={`h-12 w-12 ${iconTile} max-md:mx-auto`}>
               <Icon className="h-6 w-6" aria-hidden="true" />
             </span>
             <h3 className="mt-5 text-lg font-semibold text-[#0B0F19]">{title}</h3>
@@ -280,7 +291,7 @@ function CreditPassportCard() {
     ["Business activity", "Active"],
   ];
   return (
-    <div className={`mx-auto w-full max-w-md rounded-3xl p-6 ${glass}`}>
+    <div className={`mx-auto w-full max-w-md rounded-3xl p-[clamp(1.25rem,5vw,1.5rem)] ${glass}`}>
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-[#0B0F19]">ZakaScore</p>
         <span className="rounded-full border border-black/[0.07] bg-white/80 px-2.5 py-1 text-xs text-slate-500">
@@ -304,12 +315,12 @@ function CreditPassportCard() {
 
 function Solution() {
   return (
-    <section id="solution" className="mx-auto grid max-w-6xl scroll-mt-24 items-center gap-14 px-4 py-24 sm:px-6 lg:grid-cols-2">
+    <section id="solution" className={`mx-auto grid max-w-6xl scroll-mt-24 items-center gap-[clamp(2rem,8vw,3.5rem)] ${gutter} ${sectionY} lg:grid-cols-2`}>
       <Reveal>
         <CreditPassportCard />
       </Reveal>
-      <Reveal delay={120}>
-        <h2 className="text-3xl font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">
+      <Reveal delay={120} className="max-md:text-center">
+        <h2 className="text-[clamp(1.5rem,6vw,1.875rem)] font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">
           Turn Everyday Sales Into a Credit Profile That Speaks for You
         </h2>
         <p className="mt-4 text-base leading-relaxed text-slate-600">
@@ -368,15 +379,15 @@ const features: { icon: LucideIcon; title: string; text: string }[] = [
 
 function Features() {
   return (
-    <section id="features" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-24 sm:px-6">
-      <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
-        <div className="lg:sticky lg:top-28 lg:self-start">
+    <section id="features" className={`mx-auto max-w-6xl scroll-mt-24 ${gutter} ${sectionY}`}>
+      <div className="grid gap-[clamp(2rem,8vw,3rem)] lg:grid-cols-[0.8fr_1.2fr]">
+        <div className="lg:sticky lg:top-28 lg:self-start max-md:text-center">
           <Reveal>
             <SectionHeading
               title="Everything You Need to Get Credit-Ready"
               text="Built for busy days on the floor, the street or the stall, not for accountants."
             />
-            <div className="mt-8">
+            <div className="mt-8 max-md:flex max-md:justify-center">
               <Link href="/signup" className={outlineBtn}>
                 Get Started
                 <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -385,13 +396,13 @@ function Features() {
           </Reveal>
         </div>
 
-        <ul className="grid gap-4 sm:grid-cols-2">
+        <ul className="grid gap-4 sm:grid-cols-2 max-md:mx-auto max-md:max-w-md max-md:grid-cols-1">
           {features.map(({ icon: Icon, title, text }, index) => (
             <Reveal as="li" key={title} delay={(index % 2) * 90} className="h-full">
               <div
-                className={`h-full rounded-2xl p-5 motion-safe:transition motion-safe:duration-300 motion-safe:hover:-translate-y-0.5 ${glass}`}
+                className={`h-full rounded-2xl p-[clamp(1.25rem,6vw,1.75rem)] md:p-5 motion-safe:transition motion-safe:duration-300 motion-safe:hover:-translate-y-0.5 ${glass} max-md:text-center`}
               >
-                <span className={`h-10 w-10 ${iconTile}`}>
+                <span className={`h-10 w-10 ${iconTile} max-md:mx-auto`}>
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <h3 className="mt-4 text-base font-semibold text-[#0B0F19]">{title}</h3>
@@ -424,7 +435,7 @@ const steps = [
 
 function ChatPreview() {
   return (
-    <div className={`mx-auto w-full max-w-md rounded-3xl p-5 ${glass}`}>
+    <div className={`mx-auto w-full max-w-md rounded-3xl p-[clamp(1rem,5vw,1.25rem)] ${glass}`}>
       <div className="space-y-3">
         <ChatBubble from="you">Sold 3 airtime vouchers, R150 total, cash</ChatBubble>
         <ChatBubble from="ai">I understood R150.00, paid cash. Is that right?</ChatBubble>
@@ -443,14 +454,14 @@ function ChatPreview() {
 
 function HowItWorks() {
   return (
-    <section id="how-it-works" className="mx-auto grid max-w-6xl scroll-mt-24 items-center gap-14 px-4 py-24 sm:px-6 lg:grid-cols-2">
+    <section id="how-it-works" className={`mx-auto grid max-w-6xl scroll-mt-24 items-center gap-[clamp(2rem,8vw,3.5rem)] ${gutter} ${sectionY} lg:grid-cols-2`}>
       <div>
         <Reveal>
           <SectionHeading title="From Daily Sales to Credit Score in 3 Steps" />
         </Reveal>
-        <ol className="mt-10 space-y-8">
+        <ol className="mt-[clamp(1.75rem,8vw,2.5rem)] space-y-[clamp(2rem,8vw,2.5rem)] md:space-y-8 max-md:mx-auto max-md:max-w-md">
           {steps.map((step, index) => (
-            <Reveal as="li" key={step.title} delay={index * 120} className="flex gap-4">
+            <Reveal as="li" key={step.title} delay={index * 120} className="flex gap-4 max-md:flex-col max-md:items-center max-md:text-center">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-sm font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)]">
                 {index + 1}
               </span>
@@ -491,14 +502,14 @@ const objections: { icon: LucideIcon; title: string; text: string }[] = [
 
 function Objections() {
   return (
-    <section id="faq" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-24 sm:px-6">
+    <section id="faq" className={`mx-auto max-w-6xl scroll-mt-24 ${gutter} ${sectionY}`}>
       <Reveal>
         <SectionHeading title="Questions You Might Have" />
       </Reveal>
-      <ul className="mt-12 grid gap-6 md:grid-cols-3">
+      <ul className="mt-[clamp(2rem,8vw,3rem)] grid gap-[clamp(1rem,5vw,1.5rem)] md:grid-cols-3 max-md:mx-auto max-md:max-w-md">
         {objections.map(({ icon: Icon, title, text }, index) => (
-          <Reveal as="li" key={title} delay={index * 100} className={`rounded-2xl p-6 ${glass}`}>
-            <span className={`h-10 w-10 ${iconTile}`}>
+          <Reveal as="li" key={title} delay={index * 100} className={`rounded-2xl p-[clamp(1.25rem,6vw,2rem)] md:p-6 ${glass} max-md:text-center`}>
+            <span className={`h-10 w-10 ${iconTile} max-md:mx-auto`}>
               <Icon className="h-5 w-5" aria-hidden="true" />
             </span>
             <h3 className="mt-4 text-lg font-semibold text-[#0B0F19]">{title}</h3>
@@ -508,7 +519,7 @@ function Objections() {
       </ul>
 
       <Reveal className="mt-6">
-        <div className={`flex flex-col gap-4 rounded-2xl p-6 sm:flex-row sm:items-center sm:justify-between ${glass}`}>
+        <div className={`flex flex-col gap-4 rounded-2xl p-[clamp(1.25rem,6vw,1.5rem)] sm:flex-row sm:items-center sm:justify-between ${glass}`}>
           <div>
             <p className="font-semibold text-[#0B0F19]">Still unsure? Talk to a real person.</p>
             <p className="mt-1 text-sm text-slate-600">
@@ -538,10 +549,10 @@ function Objections() {
 
 function FinalCta() {
   return (
-    <section className="px-4 pb-24 sm:px-6">
+    <section className={`${gutter} pb-[clamp(2.5rem,10vw,4rem)] md:pb-24`}>
       <Reveal>
-        <div className="mx-auto max-w-6xl rounded-[2rem] bg-[#A3E635] px-6 py-16 text-center sm:px-12 md:py-20">
-          <h2 className="mx-auto max-w-2xl text-3xl font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">
+        <div className="mx-auto max-w-6xl rounded-[2rem] bg-[#A3E635] px-[clamp(1.25rem,6vw,1.5rem)] py-[clamp(2.5rem,12vw,4rem)] text-center sm:px-12 md:py-20">
+          <h2 className="mx-auto max-w-2xl text-[clamp(1.5rem,6vw,1.875rem)] font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">
             Your Hustle Deserves a Credit Score
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-[#0B0F19]/80">
@@ -627,8 +638,8 @@ function FooterNavLink({ link }: { link: FooterLink }) {
 function Footer() {
   return (
     <footer className="border-t border-black/[0.07] bg-white">
-      <div className="mx-auto max-w-6xl px-4 pb-8 pt-16 sm:px-6">
-        <div className="grid gap-12 lg:grid-cols-[1.2fr_2.8fr]">
+      <div className="mx-auto max-w-6xl px-[clamp(1rem,5vw,1.5rem)] pb-[clamp(2rem,8vw,2.5rem)] pt-[clamp(3rem,10vw,4rem)] sm:px-6 md:pb-8">
+        <div className="grid gap-[clamp(2rem,8vw,3rem)] lg:grid-cols-[1.2fr_2.8fr]">
           <div className="max-w-xs">
             <Link
               href="/"
@@ -641,7 +652,7 @@ function Footer() {
             </p>
           </div>
 
-          <nav aria-label="Footer" className="grid grid-cols-2 gap-8 sm:grid-cols-4">
+          <nav aria-label="Footer" className="grid grid-cols-2 gap-[clamp(1.5rem,6vw,2rem)] sm:grid-cols-4">
             {footerColumns.map((col) => (
               <div key={col.title}>
                 <h3 className="text-sm font-semibold text-[#0B0F19]">{col.title}</h3>
@@ -657,7 +668,7 @@ function Footer() {
           </nav>
         </div>
 
-        <div className="mt-14 flex flex-col gap-4 border-t border-black/[0.07] pt-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-[clamp(2.5rem,10vw,3.5rem)] flex flex-col gap-4 border-t border-black/[0.07] pt-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} ZakaScore. All rights reserved.</p>
           <ul className="flex flex-wrap items-center gap-x-6 gap-y-2">
             {legalLinks.map((link) => (
