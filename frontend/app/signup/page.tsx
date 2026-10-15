@@ -58,7 +58,7 @@ export default function SignUpPage() {
         return;
       }
 
-      router.replace("/workspace/connect");
+      router.replace("/connect");
       router.refresh();
     } catch {
       setError("Could not reach Neon Auth. Check your connection and try again.");

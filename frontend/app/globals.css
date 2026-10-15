@@ -71,17 +71,22 @@
 
 html {
   scroll-behavior: smooth;
+  max-width: 100%;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
+  max-width: 100%;
+  overflow-x: clip;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-general-sans);
   font-size: 14px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 body.menu-open {
@@ -2246,5 +2251,12 @@ button.nav-link {
   .logging-install {
     min-height: 34px;
     padding: 6px 9px;
+  }
+}
+
+@media (max-width: 767px) {
+  .page-heading,
+  .metric-card {
+    animation: none;
   }
 }
