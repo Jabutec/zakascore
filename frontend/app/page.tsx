@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BarChart3,
   Banknote,
+  ChevronDown,
   EyeOff,
   FileQuestion,
   Mail,
@@ -13,7 +14,6 @@ import {
   Smartphone,
   Users,
   WifiOff,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { Reveal } from "@/components/reveal";
@@ -21,11 +21,16 @@ import { Reveal } from "@/components/reveal";
 const WHATSAPP_URL = "https://wa.me/27735347153";
 const SUPPORT_EMAIL = "support@zakascore.co.za";
 
-/* -------------------------------------------------------------------------- */
-/*  Look: white page, glossy lime buttons, hairline borders, neutral shadows. */
-/*  Lime #A3E635 for fills (dark text on top); #4d7c0f for lime-toned text.   */
-/* -------------------------------------------------------------------------- */
+// images
+const IMAGES = {
+  problem:
+    "https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1200&q=70",
+  solution:
+    "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1200&q=70",
+};
 
+
+// Constant Colors
 const elevation =
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_1px_rgba(16,24,40,0.04),0_2px_4px_rgba(16,24,40,0.04),0_8px_16px_-4px_rgba(16,24,40,0.06),0_28px_56px_-18px_rgba(16,24,40,0.14)]";
 const elevationSm =
@@ -36,26 +41,124 @@ const iconTile = `flex shrink-0 items-center justify-center rounded-xl border bo
 const focusRing =
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4d7c0f]";
 
-/* Fluid spacing helpers. Every clamp() maxes out at the old desktop value,
-   so large screens look the same and phones scale smoothly. */
-const gutter = "px-[clamp(1rem,5vw,1.5rem)] sm:px-6";
-const sectionY = "py-[clamp(2.5rem,10vw,4rem)] md:py-24";
+// mobile wider frames
+const gutter = "px-[clamp(1.5rem,7vw,2rem)]";
+const sectionY = "py-[clamp(3.5rem,14vw,5rem)] md:py-24";
 
 const primaryBtn = `inline-flex items-center justify-center gap-2 rounded-xl border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] px-6 py-3 text-sm font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)] transition hover:brightness-105 active:brightness-95 ${focusRing}`;
 const outlineBtn = `inline-flex items-center justify-center gap-2 rounded-xl border border-black/10 bg-gradient-to-b from-white to-white/60 px-6 py-3 text-sm font-semibold text-[#0B0F19] ${elevationSm} transition hover:border-[#65a30d]/50 hover:text-[#4d7c0f] ${focusRing}`;
 const inkBtn = `inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B0F19] px-6 py-3 text-sm font-semibold text-white shadow-[0_1px_2px_rgba(16,24,40,0.2)] transition hover:bg-[#1f2937] ${focusRing}`;
 
-function SectionHeading({ title, text }: { title: string; text?: string }) {
+
+//Layout Helpers
+type Tone = "white" | "soft" | "lime";
+
+const toneClass: Record<Tone, string> = {
+  white: "bg-white",
+  soft: "bg-slate-50",
+  lime: "bg-[#f7fee7]",
+};
+
+//Separate Sections Nicely
+function Section({
+  id,
+  tone = "white",
+  children,
+}: {
+  id?: string;
+  tone?: Tone;
+  children: ReactNode;
+}) {
   return (
-    <div className="max-w-2xl max-md:mx-auto max-md:text-center">
-      <h2 className="text-[clamp(1.5rem,6vw,1.875rem)] font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">{title}</h2>
-      {text && <p className="mt-3 text-[clamp(0.9375rem,4vw,1rem)] leading-relaxed text-slate-600">{text}</p>}
+    <section
+      id={id}
+      className={`relative flex min-h-[90svh] scroll-mt-16 items-center border-t border-black/[0.06] md:min-h-0 ${toneClass[tone]}`}
+    >
+      <div className={`mx-auto w-full max-w-6xl ${gutter} ${sectionY}`}>{children}</div>
+    </section>
+  );
+}
+
+function SectionHeading({
+  eyebrow,
+  title,
+  text,
+}: {
+  eyebrow?: string;
+  title: string;
+  text?: string;
+}) {
+  return (
+    <div className="max-w-2xl text-left">
+      {eyebrow && (
+        <p className="mb-4 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#4d7c0f]">
+          <span aria-hidden="true" className="h-px w-8 bg-[#65a30d]/60" />
+          {eyebrow}
+        </p>
+      )}
+      <h2 className="text-[clamp(1.75rem,7vw,2rem)] font-semibold leading-[1.15] tracking-tight text-[#0B0F19] sm:text-4xl">
+        {title}
+      </h2>
+      {text && <p className="mt-4 text-[clamp(0.9375rem,4vw,1rem)] leading-relaxed text-slate-600">{text}</p>}
     </div>
   );
 }
 
-/* -------------------------------- Navbar ---------------------------------- */
+function Photo({
+  src,
+  label,
+  className = "",
+  children,
+}: {
+  src: string;
+  label: string;
+  className?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      className={`relative overflow-hidden rounded-2xl border border-black/[0.07] bg-cover bg-center ${className}`}
+      style={{ backgroundImage: `url(${src}), linear-gradient(135deg,#ecfccb,#f7fee7)` }}
+    >
+      {children}
+    </div>
+  );
+}
 
+// Flat dropdown row
+function AccordionItem({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon?: LucideIcon;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <details className="group border-b border-black/[0.08]">
+      <summary
+        className={`flex cursor-pointer list-none items-center gap-4 py-5 text-left [&::-webkit-details-marker]:hidden ${focusRing}`}
+      >
+        {Icon && (
+          <span className={`h-9 w-9 ${iconTile}`}>
+            <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+          </span>
+        )}
+        <span className="flex-1 text-base font-semibold text-[#0B0F19]">{title}</span>
+        <ChevronDown
+          className="h-5 w-5 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180 group-open:text-[#4d7c0f]"
+          aria-hidden="true"
+        />
+      </summary>
+      <p className={`pb-5 text-sm leading-relaxed text-slate-600 ${Icon ? "pl-[3.25rem]" : ""} pr-9`}>{children}</p>
+    </details>
+  );
+}
+
+//Navbar
 function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-black/[0.07] bg-white/80 backdrop-blur-xl backdrop-saturate-150">
@@ -80,7 +183,7 @@ function Navbar() {
   );
 }
 
-/* ------------------------------ Phone mockup ------------------------------ */
+//Phone mockup
 
 function ScoreGauge({ score = 712 }: { score?: number }) {
   const pct = (score - 300) / 550;
@@ -167,31 +270,31 @@ function PhoneMockup() {
   );
 }
 
-/* ------------------------------ 1. Hero ----------------------------------- */
+//Hero
 
 function Hero() {
   return (
     <section
-      className={`mx-auto grid max-w-6xl items-center gap-[clamp(1.5rem,6vw,2.5rem)] ${gutter} py-[clamp(3rem,12vw,4rem)] text-center md:py-16 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-12 lg:py-20 lg:text-left`}
+      className={`mx-auto grid min-h-[calc(78svh-4rem)] max-w-6xl items-center gap-[clamp(1.5rem,6vw,2.5rem)] ${gutter} py-[clamp(2.5rem,10vw,3.5rem)] text-center md:min-h-0 md:py-16 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-12 lg:py-20 lg:text-left`}
     >
       <div className="motion-safe:animate-[rise_0.7s_cubic-bezier(0.22,0.61,0.36,1)_both]">
-        <h1 className="text-balance text-[clamp(1.75rem,7.5vw,2.25rem)] font-semibold leading-[1.1] tracking-tight text-[#0B0F19] sm:text-[clamp(2.25rem,5.5vw,3rem)] lg:text-[clamp(2.5rem,3.8vw,3.5rem)]">
+        <h1 className="text-balance text-[clamp(2rem,9vw,2.5rem)] font-semibold leading-[1.1] tracking-tight text-[#0B0F19] sm:text-[clamp(2.25rem,5.5vw,3rem)] lg:text-[clamp(2.5rem,3.8vw,3.5rem)]">
           Turn Your Sales Into Financial Intelligence and Credit Potential
         </h1>
-        <p className="mx-auto mt-[clamp(1rem,4vw,1.5rem)] max-w-xl text-[clamp(0.9375rem,3.8vw,1rem)] leading-relaxed text-slate-600 sm:text-base lg:mx-0 lg:text-[1.0625rem]">
-          Track every sale, understand your business performance, and build an alternative credit score all in one simple app. Get financial intelligence from your daily transactions, discover your top-performing offerings, monitor revenue trends, and build a clearer picture of your business's financial activity. 
+        <p className="mx-auto mt-[clamp(1.25rem,5vw,1.5rem)] max-w-xl text-[clamp(1rem,4vw,1.0625rem)] leading-relaxed text-slate-600 lg:mx-0">
+          Track every sale, understand your business performance, and build an alternative credit score all in one simple app. Get financial intelligence from your daily transactions, discover your top-performing offerings, monitor revenue trends, and build a clearer picture of your business's financial activity.
         </p>
-        <div className="mt-[clamp(1.5rem,6vw,2rem)] flex flex-row justify-center gap-3 sm:items-center lg:justify-start max-md:mx-auto max-md:max-w-md">
+        <div className="mt-[clamp(1.75rem,7vw,2.25rem)] flex flex-row items-center justify-center gap-2.5 sm:gap-3 lg:justify-start">
           <Link
             href="/signup"
-            className={`${primaryBtn} min-w-0 flex-1 !px-[clamp(0.75rem,3.5vw,1.5rem)] !text-[clamp(0.8125rem,3.6vw,0.875rem)] sm:flex-none`}
+            className={`${primaryBtn} !px-4 !py-2 !text-xs sm:!px-6 sm:!py-3 sm:!text-sm`}
           >
             Get Started
-            <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <ArrowRight className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden="true" />
           </Link>
           <Link
             href="/#how-it-works"
-            className={`${outlineBtn} min-w-0 flex-1 !px-[clamp(0.75rem,3.5vw,1.5rem)] !text-[clamp(0.8125rem,3.6vw,0.875rem)] sm:flex-none`}
+            className={`${outlineBtn} !px-4 !py-2 !text-xs sm:!px-6 sm:!py-3 sm:!text-sm`}
           >
             See How It Works
           </Link>
@@ -206,39 +309,7 @@ function Hero() {
   );
 }
 
-/* ---------------- Trust strip (sits where "companies" would go) ------------- */
-
-const trustPoints: { icon: LucideIcon; title: string; text: string }[] = [
-  { icon: Zap, title: "On-Device AI", text: "Your messages are read on your phone, not in the cloud." },
-  { icon: WifiOff, title: "Works Offline", text: "Log sales without data. They sync when you reconnect." },
-  { icon: ShieldCheck, title: "You Stay In Control", text: "Only the sales you confirm are saved to your account." },
-];
-
-function TrustStrip() {
-  return (
-    <section aria-label="Why people trust ZakaScore" className={gutter}>
-      <Reveal>
-        <ul
-          className={`mx-auto grid max-w-6xl divide-y divide-black/[0.07] rounded-2xl md:grid-cols-3 md:divide-x md:divide-y-0 ${glass}`}
-        >
-          {trustPoints.map(({ icon: Icon, title, text }) => (
-            <li key={title} className="flex items-start gap-3 p-6 max-md:flex-col max-md:items-center max-md:p-[clamp(1.5rem,7vw,2rem)] max-md:text-center">
-              <span className={`h-10 w-10 ${iconTile}`}>
-                <Icon className="h-5 w-5" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="font-semibold text-[#0B0F19]">{title}</p>
-                <p className="text-sm text-slate-600">{text}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </Reveal>
-    </section>
-  );
-}
-
-/* ------------------------ 2. Problem / agitation -------------------------- */
+//Problem
 
 const problems: { icon: LucideIcon; title: string; text: string }[] = [
   {
@@ -260,29 +331,53 @@ const problems: { icon: LucideIcon; title: string; text: string }[] = [
 
 function Problem() {
   return (
-    <section className={`mx-auto max-w-6xl ${gutter} ${sectionY}`}>
-      <Reveal>
-        <SectionHeading
-          title="Your Business Is Real. Your Paper Trail Isn’t."
-          text="Plenty of South African businesses are doing well and still get turned away. Here’s why."
-        />
-      </Reveal>
-      <ul className="mt-[clamp(2rem,8vw,3rem)] grid gap-[clamp(1rem,5vw,1.5rem)] md:grid-cols-3 max-md:mx-auto max-md:max-w-md">
-        {problems.map(({ icon: Icon, title, text }, index) => (
-          <Reveal as="li" key={title} delay={index * 100} className={`rounded-2xl p-[clamp(1.25rem,6vw,2rem)] md:p-6 ${glass} max-md:text-center`}>
-            <span className={`h-12 w-12 ${iconTile} max-md:mx-auto`}>
-              <Icon className="h-6 w-6" aria-hidden="true" />
-            </span>
-            <h3 className="mt-5 text-lg font-semibold text-[#0B0F19]">{title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">{text}</p>
-          </Reveal>
-        ))}
-      </ul>
-    </section>
+    <Section tone="soft">
+      <div className="grid gap-[clamp(2rem,8vw,3rem)] lg:grid-cols-2 lg:gap-x-16 lg:gap-y-10">
+        <Reveal className="lg:col-start-1 lg:row-start-1">
+          <SectionHeading
+            eyebrow="01 · The Problem"
+            title="Your Business Is Real. Your Paper Trail Isn’t."
+            text="Plenty of South African businesses are doing well and still get turned away. Here’s why."
+          />
+        </Reveal>
+
+        <Reveal delay={80} className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          <Photo
+            src={IMAGES.problem}
+            label="A small trader serving customers at a market stall"
+            className="h-[clamp(11rem,32svh,16rem)] lg:h-full lg:min-h-[28rem]"
+          >
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19]/55 via-transparent to-transparent" />
+            <p className="absolute bottom-4 left-4 right-4 text-sm font-medium text-white">
+              Real sales. No paperwork to prove them.
+            </p>
+          </Photo>
+        </Reveal>
+
+        <ol className="lg:col-start-1 lg:row-start-2">
+          {problems.map(({ icon: Icon, title, text }, index) => (
+            <Reveal
+              as="li"
+              key={title}
+              delay={index * 100}
+              className="flex gap-4 border-t border-black/[0.08] py-6 first:border-t-0 first:pt-0 last:pb-0"
+            >
+              <span className={`h-11 w-11 ${iconTile}`}>
+                <Icon className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <h3 className="text-lg font-semibold text-[#0B0F19]">{title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{text}</p>
+              </div>
+            </Reveal>
+          ))}
+        </ol>
+      </div>
+    </Section>
   );
 }
 
-/* ----------------------------- 3. Solution -------------------------------- */
+//Solution
 
 function CreditPassportCard() {
   const signals = [
@@ -291,7 +386,7 @@ function CreditPassportCard() {
     ["Business activity", "Active"],
   ];
   return (
-    <div className={`mx-auto w-full max-w-md rounded-3xl p-[clamp(1.25rem,5vw,1.5rem)] ${glass}`}>
+    <div className={`mx-auto w-full max-w-sm rounded-3xl p-[clamp(1.25rem,5vw,1.5rem)] ${glass}`}>
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-[#0B0F19]">ZakaScore</p>
         <span className="rounded-full border border-black/[0.07] bg-white/80 px-2.5 py-1 text-xs text-slate-500">
@@ -315,109 +410,38 @@ function CreditPassportCard() {
 
 function Solution() {
   return (
-    <section id="solution" className={`mx-auto grid max-w-6xl scroll-mt-24 items-center gap-[clamp(2rem,8vw,3.5rem)] ${gutter} ${sectionY} lg:grid-cols-2`}>
-      <Reveal>
-        <CreditPassportCard />
-      </Reveal>
-      <Reveal delay={120} className="max-md:text-center">
-        <h2 className="text-[clamp(1.5rem,6vw,1.875rem)] font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">
-          Turn Everyday Sales Into a Credit Profile That Speaks for You
-        </h2>
-        <p className="mt-4 text-base leading-relaxed text-slate-600">
-          Tell ZakaScore about each sale the way you would text a friend. It builds a clear picture of your revenue,
-          consistency and growth, then turns it into an Alternative Credit Score you can take to suppliers and
-          lenders.
-        </p>
-        <p className="mt-3 text-base leading-relaxed text-slate-600">
-          The AI that reads your messages runs on your own phone, so you are never feeding a cloud chatbot.
-        </p>
-        <div className="mt-8">
-          <Link href="/signup" className={primaryBtn}>
-            Check Your Score
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
-          </Link>
-        </div>
-      </Reveal>
-    </section>
-  );
-}
+    <Section id="solution" tone="white">
+      <div className="grid items-center gap-[clamp(2.5rem,10vw,3.5rem)] lg:grid-cols-2 lg:gap-16">
+        <Reveal delay={120} className="lg:order-2">
+          <SectionHeading
+            eyebrow="02 · The Solution"
+            title="Turn Everyday Sales Into a Credit Profile That Speaks for You"
+          />
+          <p className="mt-4 text-base leading-relaxed text-slate-600">
+            Tell ZakaScore about each sale the way you would text a friend. It builds a clear picture of your revenue,
+            consistency and growth, then turns it into an Alternative Credit Score you can take to suppliers and
+            lenders.
+          </p>
+          <p className="mt-3 text-base leading-relaxed text-slate-600">
+            The AI that reads your messages runs on your own phone, so you are never feeding a cloud chatbot.
+          </p>
+          <div className="mt-8">
+            <Link href="/signup" className={primaryBtn}>
+              Check Your Score
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          </div>
+        </Reveal>
 
-/* ----------------------- 4. Features / benefits --------------------------- */
-
-const features: { icon: LucideIcon; title: string; text: string }[] = [
-  {
-    icon: Banknote,
-    title: "Get Credit Without a Payslip",
-    text: "An Alternative Credit Score built from your real daily sales.",
-  },
-  {
-    icon: Smartphone,
-    title: "Log a Sale in Seconds",
-    text: "Type it like a text: “2 shirts, R300, cash”. Review it, confirm it, done.",
-  },
-  {
-    icon: WifiOff,
-    title: "Keep Trading Without Data",
-    text: "Installs like an app and works offline. Sales sync automatically when you reconnect.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Keep Your Messages Private",
-    text: "On-device AI reads what you type, so it never goes to a cloud chatbot.",
-  },
-  {
-    icon: BarChart3,
-    title: "See What Is Working",
-    text: "Revenue trends, top sellers and payment channels in one clean dashboard.",
-  },
-  {
-    icon: Users,
-    title: "Bring Your Team Along",
-    text: "Invite staff with one-time codes and keep every store in one place.",
-  },
-];
-
-function Features() {
-  return (
-    <section id="features" className={`mx-auto max-w-6xl scroll-mt-24 ${gutter} ${sectionY}`}>
-      <div className="grid gap-[clamp(2rem,8vw,3rem)] lg:grid-cols-[0.8fr_1.2fr]">
-        <div className="lg:sticky lg:top-28 lg:self-start max-md:text-center">
-          <Reveal>
-            <SectionHeading
-              title="Everything You Need to Get Credit-Ready"
-              text="Built for busy days on the floor, the street or the stall, not for accountants."
-            />
-            <div className="mt-8 max-md:flex max-md:justify-center">
-              <Link href="/signup" className={outlineBtn}>
-                Get Started
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </div>
-          </Reveal>
-        </div>
-
-        <ul className="grid gap-4 sm:grid-cols-2 max-md:mx-auto max-md:max-w-md max-md:grid-cols-1">
-          {features.map(({ icon: Icon, title, text }, index) => (
-            <Reveal as="li" key={title} delay={(index % 2) * 90} className="h-full">
-              <div
-                className={`h-full rounded-2xl p-[clamp(1.25rem,6vw,1.75rem)] md:p-5 motion-safe:transition motion-safe:duration-300 motion-safe:hover:-translate-y-0.5 ${glass} max-md:text-center`}
-              >
-                <span className={`h-10 w-10 ${iconTile} max-md:mx-auto`}>
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <h3 className="mt-4 text-base font-semibold text-[#0B0F19]">{title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{text}</p>
-              </div>
-            </Reveal>
-          ))}
-        </ul>
+        <Reveal className="lg:order-1">
+          <CreditPassportCard />
+        </Reveal>
       </div>
-    </section>
+    </Section>
   );
 }
 
-/* ---------------------------- 5. How it works ----------------------------- */
-
+//How it works
 const steps = [
   {
     title: "Record Your Cash Business",
@@ -454,104 +478,128 @@ function ChatPreview() {
 
 function HowItWorks() {
   return (
-    <section id="how-it-works" className={`mx-auto grid max-w-6xl scroll-mt-24 items-center gap-[clamp(2rem,8vw,3.5rem)] ${gutter} ${sectionY} lg:grid-cols-2`}>
-      <div>
-        <Reveal>
-          <SectionHeading title="From Daily Sales to Credit Score in 3 Steps" />
+    <Section id="how-it-works" tone="lime">
+      <div className="grid items-center gap-[clamp(2.5rem,10vw,3.5rem)] lg:grid-cols-2 lg:gap-16">
+        <div>
+          <Reveal>
+            <SectionHeading eyebrow="03 · How It Works" title="From Daily Sales to Credit Score in 3 Steps" />
+          </Reveal>
+          <ol className="mt-[clamp(2rem,8vw,2.5rem)] space-y-8">
+            {steps.map((step, index) => (
+              <Reveal as="li" key={step.title} delay={index * 120} className="flex gap-4">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-sm font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)]">
+                  {index + 1}
+                </span>
+                <div>
+                  <h3 className="text-lg font-semibold text-[#0B0F19]">{step.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-600">{step.text}</p>
+                </div>
+              </Reveal>
+            ))}
+          </ol>
+        </div>
+        <Reveal delay={150}>
+          <ChatPreview />
         </Reveal>
-        <ol className="mt-[clamp(1.75rem,8vw,2.5rem)] space-y-[clamp(2rem,8vw,2.5rem)] md:space-y-8 max-md:mx-auto max-md:max-w-md">
-          {steps.map((step, index) => (
-            <Reveal as="li" key={step.title} delay={index * 120} className="flex gap-4 max-md:flex-col max-md:items-center max-md:text-center">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-sm font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)]">
-                {index + 1}
-              </span>
-              <div>
-                <h3 className="text-lg font-semibold text-[#0B0F19]">{step.title}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-slate-600">{step.text}</p>
-              </div>
-            </Reveal>
-          ))}
-        </ol>
       </div>
-      <Reveal delay={150}>
-        <ChatPreview />
-      </Reveal>
-    </section>
+    </Section>
   );
 }
 
-/* -------------------------- 6. Objection handling ------------------------- */
-
-const objections: { icon: LucideIcon; title: string; text: string }[] = [
+//FAQ
+const objections: { title: string; text: string }[] = [
   {
-    icon: ShieldCheck,
+    title: "What Is ZakaScore?",
+    text: "ZakaScore turns your daily sales into an Alternative Credit Score. You record what you sell, it builds a picture of your revenue, consistency and growth, and you can take that score to suppliers and lenders instead of a payslip.",
+  },
+  {
+    title: "Who Is It For?",
+    text: "Small business owners who deal in cash and have no formal paper trail: traders, spaza shop owners, hairdressers, airtime sellers, stall holders and other hustlers.",
+  },
+  {
+    title: "How Do I Log a Sale?",
+    text: "Type it the way you would text a friend, for example “2 shirts, R300, cash”. ZakaScore reads it, shows you what it understood, and you confirm before anything is saved.",
+  },
+  {
+    title: "What Happens If It Reads My Sale Wrong?",
+    text: "Nothing gets recorded until you approve it. Every sale appears in a review screen first, so you can check the amount and payment type before you confirm.",
+  },
+  {
+    title: "How Is My Score Calculated?",
+    text: "Your score is built from your own logged sales: your revenue trend, how consistent your cash flow is, and how active your business is. The more regularly you log, the clearer the picture it can show.",
+  },
+  {
     title: "Is My Data Safe?",
     text: "The AI reads your messages on your own device, not on a cloud chatbot. Only the sale you confirm is saved to your account, and you review every sale before it is recorded.",
   },
   {
-    icon: Smartphone,
     title: "Do I Need Data or a New Phone?",
     text: "ZakaScore installs like an app and keeps working offline. The on-device assistant needs a recent browser with WebGPU. Without it, you can still type your sales and review them before saving.",
   },
   {
-    icon: Banknote,
+    title: "Can My Staff Use It Too?",
+    text: "Yes. You can invite staff with one-time codes and keep every store in one place, so everyone's sales go into the same business record.",
+  },
+  {
     title: "Will Lenders Take It Seriously?",
     text: "Your score comes from real sales history, so you can show a track record instead of a promise. Every lender decides for itself, so treat it as strong supporting evidence, not a guarantee.",
   },
+  {
+    title: "What If Something Goes Wrong?",
+    text: "Message us on WhatsApp or email support@zakascore.co.za. If something misbehaves while you are signed in, you can also open a ticket from your dashboard.",
+  },
 ];
 
-function Objections() {
+function Faq() {
   return (
-    <section id="faq" className={`mx-auto max-w-6xl scroll-mt-24 ${gutter} ${sectionY}`}>
-      <Reveal>
-        <SectionHeading title="Questions You Might Have" />
-      </Reveal>
-      <ul className="mt-[clamp(2rem,8vw,3rem)] grid gap-[clamp(1rem,5vw,1.5rem)] md:grid-cols-3 max-md:mx-auto max-md:max-w-md">
-        {objections.map(({ icon: Icon, title, text }, index) => (
-          <Reveal as="li" key={title} delay={index * 100} className={`rounded-2xl p-[clamp(1.25rem,6vw,2rem)] md:p-6 ${glass} max-md:text-center`}>
-            <span className={`h-10 w-10 ${iconTile} max-md:mx-auto`}>
-              <Icon className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <h3 className="mt-4 text-lg font-semibold text-[#0B0F19]">{title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-600">{text}</p>
-          </Reveal>
-        ))}
-      </ul>
+    <Section id="faq" tone="white">
+      <div className="max-w-3xl">
+        <Reveal>
+          <SectionHeading eyebrow="04 · FAQ" title="Questions You Might Have" />
+        </Reveal>
+        <Reveal delay={80} className="mt-[clamp(2rem,8vw,2.5rem)] border-t border-black/[0.08]">
+          {objections.map(({ title, text }) => (
+            <AccordionItem key={title} title={title}>
+              {text}
+            </AccordionItem>
+          ))}
+        </Reveal>
 
-      <Reveal className="mt-6">
-        <div className={`flex flex-col gap-4 rounded-2xl p-[clamp(1.25rem,6vw,1.5rem)] sm:flex-row sm:items-center sm:justify-between ${glass}`}>
-          <div>
-            <p className="font-semibold text-[#0B0F19]">Still unsure? Talk to a real person.</p>
-            <p className="mt-1 text-sm text-slate-600">
-              Chat with us on WhatsApp, or open a ticket from inside your dashboard if something misbehaves.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className={outlineBtn}>
-              <MessageCircle className="h-4 w-4" aria-hidden="true" />
-              Open WhatsApp
-            </a>
-            <a
-              href={`mailto:${SUPPORT_EMAIL}`}
-              className={`inline-flex items-center gap-2 rounded-md text-sm font-semibold text-[#4d7c0f] underline-offset-4 hover:underline ${focusRing}`}
-            >
-              <Mail className="h-4 w-4" aria-hidden="true" />
-              {SUPPORT_EMAIL}
-            </a>
-          </div>
-        </div>
-      </Reveal>
-    </section>
+        <Reveal className="mt-[clamp(3rem,12vw,4rem)]">
+  <p className="font-semibold text-[#0B0F19]">Still unsure? Talk to a real person.</p>
+  <p className="mt-1 text-sm leading-relaxed text-slate-600">
+    Chat with us on WhatsApp, or open a ticket from inside your dashboard if something misbehaves.
+  </p>
+  <div className="mt-5 flex max-w-md flex-row gap-2.5 sm:gap-3">
+    <a
+      href={WHATSAPP_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`${outlineBtn} min-w-0 flex-1 !px-3 !py-2.5 !text-[clamp(0.8125rem,3.6vw,0.875rem)] sm:flex-none sm:!px-6 sm:!py-3`}
+    >
+      <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+      WhatsApp
+    </a>
+    <a
+      href={`mailto:${SUPPORT_EMAIL}`}
+      className={`${outlineBtn} min-w-0 flex-1 !px-3 !py-2.5 !text-[clamp(0.8125rem,3.6vw,0.875rem)] sm:flex-none sm:!px-6 sm:!py-3`}
+    >
+      <Mail className="h-4 w-4 shrink-0" aria-hidden="true" />
+      Email Us
+    </a>
+  </div>
+</Reveal>
+      </div>
+    </Section>
   );
 }
 
-/* ----------------------------- 7. Final CTA ------------------------------- */
-
+//Final CTA
 function FinalCta() {
   return (
-    <section className={`${gutter} pb-[clamp(2.5rem,10vw,4rem)] md:pb-24`}>
-      <Reveal>
-        <div className="mx-auto max-w-6xl rounded-[2rem] bg-[#A3E635] px-[clamp(1.25rem,6vw,1.5rem)] py-[clamp(2.5rem,12vw,4rem)] text-center sm:px-12 md:py-20">
+    <section className="border-t border-black/[0.06] bg-white px-3 py-[clamp(1.5rem,6vw,2.5rem)] sm:px-6 md:py-16">
+      <Reveal className="mx-auto w-full max-w-7xl">
+        <div className="rounded-[2rem] bg-[#A3E635] px-[clamp(1.25rem,6vw,1.5rem)] py-[clamp(2.5rem,10vw,3.5rem)] text-center sm:px-12 md:py-20">
           <h2 className="mx-auto max-w-2xl text-[clamp(1.5rem,6vw,1.875rem)] font-semibold tracking-tight text-[#0B0F19] sm:text-4xl">
             Your Hustle Deserves a Credit Score
           </h2>
@@ -575,9 +623,7 @@ function FinalCta() {
     </section>
   );
 }
-
-/* ------------------------------- 8. Footer -------------------------------- */
-
+//Footer
 type FooterLink = { label: string; href: string; external?: boolean };
 
 const footerColumns: { title: string; links: FooterLink[] }[] = [
@@ -618,7 +664,7 @@ const legalLinks: FooterLink[] = [
   { label: "Terms of Service", href: "/terms" },
 ];
 
-const footerLinkClass = `rounded-md text-sm text-slate-600 transition hover:text-[#4d7c0f] hover:underline underline-offset-4 ${focusRing}`;
+const footerLinkClass = `rounded-md text-sm text-white/70 transition hover:text-[#A3E635] hover:underline underline-offset-4 ${focusRing}`;
 
 function FooterNavLink({ link }: { link: FooterLink }) {
   if (link.external) {
@@ -637,17 +683,17 @@ function FooterNavLink({ link }: { link: FooterLink }) {
 
 function Footer() {
   return (
-    <footer className="border-t border-black/[0.07] bg-white">
-      <div className="mx-auto max-w-6xl px-[clamp(1rem,5vw,1.5rem)] pb-[clamp(2rem,8vw,2.5rem)] pt-[clamp(3rem,10vw,4rem)] sm:px-6 md:pb-8">
+    <footer className="border-t border-white/10 bg-[#0B0F19]">
+      <div className={`mx-auto max-w-6xl ${gutter} pb-[clamp(2rem,8vw,2.5rem)] pt-[clamp(3rem,10vw,4rem)] md:pb-8`}>
         <div className="grid gap-[clamp(2rem,8vw,3rem)] lg:grid-cols-[1.2fr_2.8fr]">
           <div className="max-w-xs">
             <Link
               href="/"
-              className={`rounded-md text-xl font-semibold tracking-tight text-[#0B0F19] ${focusRing}`}
+              className="rounded-md text-xl font-semibold tracking-tight text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#A3E635]"
             >
-              Zaka<span className="text-[#4d7c0f]">Score</span>
+              Zaka<span className="text-[#A3E635]">Score</span>
             </Link>
-            <p className="mt-4 text-sm leading-relaxed text-slate-600">
+            <p className="mt-4 text-sm leading-relaxed text-white/70">
               Private, on-device credit scoring for South African small businesses, traders, and hustlers.
             </p>
           </div>
@@ -655,7 +701,7 @@ function Footer() {
           <nav aria-label="Footer" className="grid grid-cols-2 gap-[clamp(1.5rem,6vw,2rem)] sm:grid-cols-4">
             {footerColumns.map((col) => (
               <div key={col.title}>
-                <h3 className="text-sm font-semibold text-[#0B0F19]">{col.title}</h3>
+                <h3 className="text-sm font-semibold text-white">{col.title}</h3>
                 <ul className="mt-4 space-y-3">
                   {col.links.map((link) => (
                     <li key={link.label}>
@@ -668,7 +714,7 @@ function Footer() {
           </nav>
         </div>
 
-        <div className="mt-[clamp(2.5rem,10vw,3.5rem)] flex flex-col gap-4 border-t border-black/[0.07] pt-6 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-[clamp(2.5rem,10vw,3.5rem)] flex flex-col gap-4 border-t border-white/10 pt-6 text-sm text-white/50 sm:flex-row sm:items-center sm:justify-between">
           <p>© {new Date().getFullYear()} ZakaScore. All rights reserved.</p>
           <ul className="flex flex-wrap items-center gap-x-6 gap-y-2">
             {legalLinks.map((link) => (
@@ -683,20 +729,17 @@ function Footer() {
   );
 }
 
-/* --------------------------------- Page ----------------------------------- */
-
+//Page
 export default function Home() {
   return (
     <div className="min-h-screen overflow-x-clip bg-white font-sans text-[#0B0F19] antialiased">
       <Navbar />
       <main>
         <Hero />
-        <TrustStrip />
         <Problem />
         <Solution />
-        <Features />
         <HowItWorks />
-        <Objections />
+        <Faq />
         <FinalCta />
       </main>
       <Footer />

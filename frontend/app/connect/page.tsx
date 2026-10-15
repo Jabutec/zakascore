@@ -107,7 +107,7 @@ export default function ConnectPage() {
             <p className="text-sm text-emerald-900">Share this one-time employee invite code with a team member:</p>
             <p className="mt-2 text-2xl font-semibold tracking-widest text-emerald-950">{newConnectCode}</p>
             <p className="mt-2 text-xs text-emerald-800">This code expires after 24 hours and can be used once.</p>
-            <button type="button" onClick={() => router.replace("/dashboard")} className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white">
+            <button type="button" onClick={() => router.replace("/workspace")} className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white">
               Continue to dashboard
             </button>
           </div>

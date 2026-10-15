@@ -880,7 +880,7 @@ export default function LoggingApp() {
       <StateScreen
         title="Connect your business"
         text="Set up a business or join one with an invite code before recording sales."
-        href="/workspace/connect"
+        href="/connect"
         cta="Business setup"
       />
     );
