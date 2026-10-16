@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth/client";
 import { redeemConnectCode } from "@/lib/connect-code";
-import { AuthShell, ConnectCodeField, Field, FormAlert, limeButton, textLink } from "@/components/auth-ui";
+import { AuthShell, ConnectCodeField, Field, FormAlert, PasswordField, limeButton, textLink } from "@/components/auth-ui";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -75,7 +75,7 @@ export default function LoginPage() {
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <Field label="Email" name="email" type="email" autoComplete="email" required />
-        <Field label="Password" name="password" type="password" autoComplete="current-password" required />
+        <PasswordField label="Password" name="password" autoComplete="current-password" required />
         <ConnectCodeField value={code} onChange={setCode} />
         <button type="submit" disabled={loading} className={limeButton}>
           {loading ? "Signing In…" : "Sign In"}

@@ -16,6 +16,7 @@ import {
   WifiOff,
   type LucideIcon,
 } from "lucide-react";
+import { Navbar } from "@/components/navbar";
 import { Reveal } from "@/components/reveal";
 
 const WHATSAPP_URL = "https://wa.me/27735347153";
@@ -119,9 +120,16 @@ function Photo({
     <div
       role="img"
       aria-label={label}
-      className={`relative overflow-hidden rounded-2xl border border-black/[0.07] bg-cover bg-center ${className}`}
-      style={{ backgroundImage: `url(${src}), linear-gradient(135deg,#ecfccb,#f7fee7)` }}
+      className={`relative isolate overflow-hidden rounded-2xl border border-black/[0.07] bg-gradient-to-br from-[#ecfccb] to-[#f7fee7] ${className}`}
     >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="absolute inset-0 h-full w-full object-cover"
+      />
       {children}
     </div>
   );
@@ -155,31 +163,6 @@ function AccordionItem({
       </summary>
       <p className={`pb-5 text-sm leading-relaxed text-slate-600 ${Icon ? "pl-[3.25rem]" : ""} pr-9`}>{children}</p>
     </details>
-  );
-}
-
-//Navbar
-function Navbar() {
-  return (
-    <header className="sticky top-0 z-50 border-b border-black/[0.07] bg-white/80 backdrop-blur-xl backdrop-saturate-150">
-      <nav aria-label="Main" className={`mx-auto flex h-16 max-w-6xl items-center justify-between gap-6 ${gutter}`}>
-        <Link href="/" className={`rounded-md text-xl font-semibold tracking-tight text-[#0B0F19] ${focusRing}`}>
-          Zaka<span className="text-[#4d7c0f]">Score</span>
-        </Link>
-
-        <div className="flex items-center gap-3 sm:gap-5">
-          <Link
-            href="/login"
-            className={`rounded-md text-sm font-medium text-[#0B0F19] transition hover:text-[#4d7c0f] ${focusRing}`}
-          >
-            Sign In
-          </Link>
-          <Link href="/signup" className={`${primaryBtn} !px-[clamp(0.875rem,4vw,1.25rem)] !py-2.5 !text-[clamp(0.8125rem,3.5vw,0.875rem)]`}>
-            Get Started
-          </Link>
-        </div>
-      </nav>
-    </header>
   );
 }
 
@@ -271,46 +254,46 @@ function PhoneMockup() {
 }
 
 //Hero
-
 function Hero() {
   return (
-    <section
-      className={`mx-auto grid min-h-[calc(78svh-4rem)] max-w-6xl items-center gap-[clamp(1.5rem,6vw,2.5rem)] ${gutter} py-[clamp(2.5rem,10vw,3.5rem)] text-center md:min-h-0 md:py-16 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-12 lg:py-20 lg:text-left`}
-    >
-      <div className="motion-safe:animate-[rise_0.7s_cubic-bezier(0.22,0.61,0.36,1)_both]">
-        <h1 className="text-balance text-[clamp(2rem,9vw,2.5rem)] font-semibold leading-[1.1] tracking-tight text-[#0B0F19] sm:text-[clamp(2.25rem,5.5vw,3rem)] lg:text-[clamp(2.5rem,3.8vw,3.5rem)]">
-          Turn Your Sales Into Financial Intelligence and Credit Potential
-        </h1>
-        <p className="mx-auto mt-[clamp(1.25rem,5vw,1.5rem)] max-w-xl text-[clamp(1rem,4vw,1.0625rem)] leading-relaxed text-slate-600 lg:mx-0">
-          Track every sale, understand your business performance, and build an alternative credit score all in one simple app. Get financial intelligence from your daily transactions, discover your top-performing offerings, monitor revenue trends, and build a clearer picture of your business's financial activity.
-        </p>
-        <div className="mt-[clamp(1.75rem,7vw,2.25rem)] flex flex-row items-center justify-center gap-2.5 sm:gap-3 lg:justify-start">
-          <Link
-            href="/signup"
-            className={`${primaryBtn} !px-4 !py-2 !text-xs sm:!px-6 sm:!py-3 sm:!text-sm`}
-          >
-            Get Started
-            <ArrowRight className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" aria-hidden="true" />
-          </Link>
-          <Link
-            href="/#how-it-works"
-            className={`${outlineBtn} !px-4 !py-2 !text-xs sm:!px-6 sm:!py-3 sm:!text-sm`}
-          >
-            See How It Works
-          </Link>
+    <section className="relative bg-gradient-to-bl from-[#a3e635] via-[#d9f99d] to-[#f7fee7]">
+      <div
+        className={`mx-auto grid min-h-[100svh] max-w-6xl items-center gap-[clamp(1.5rem,6vw,2.5rem)] ${gutter} pb-12 pt-28 text-center md:min-h-0 md:pb-16 md:pt-32 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-12 lg:pb-20 lg:pt-36 lg:text-left`}
+      >
+        <div className="motion-safe:animate-[rise_0.7s_cubic-bezier(0.22,0.61,0.36,1)_both]">
+          <h1 className="text-balance text-[clamp(2rem,9vw,2.5rem)] leading-[1.1] tracking-tight text-[#0B0F19] sm:text-[clamp(2.25rem,5.5vw,3rem)] lg:text-[clamp(2.5rem,3.8vw,3.5rem)]">
+            Turn Your Sales Into Financial Intelligence and Credit Potential
+          </h1>
+          <p className="mx-auto mt-[clamp(1.25rem,5vw,1.5rem)] max-w-xl text-[clamp(1rem,4vw,1.0625rem)] leading-relaxed text-slate-600 lg:mx-0">
+            Track every sale, understand your business performance, and build an alternative credit score all in one simple app. Get financial intelligence from your daily transactions, discover your top-performing offerings, monitor revenue trends, and build a clearer picture of your business's financial activity.
+          </p>
+          <div className="mt-[clamp(1.75rem,7vw,2.25rem)] flex flex-row items-center justify-center gap-2.5 sm:gap-3 lg:justify-start">
+            <Link
+              href="/signup"
+              className={`inline-flex items-center justify-center gap-2 rounded-xl bg-[#CC5500] !px-5 !py-2.5 text-[0.8125rem] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_2px_rgba(16,24,40,0.2)] transition hover:bg-[#3f6212] sm:!px-6 sm:!py-3 sm:text-sm ${focusRing}`}
+            >
+              Get Started
+              <ArrowRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+            </Link>
+            <Link
+              href="/#how-it-works"
+              className={`${outlineBtn} !px-5 !py-2.5 !text-[0.8125rem] sm:!px-6 sm:!py-3 sm:!text-sm`}
+            >
+              See How It Works
+            </Link>
+          </div>
         </div>
-      </div>
 
-      {/* Hidden on phones; shown from md up */}
-      <div className="relative mx-auto hidden w-full motion-safe:animate-[rise_0.8s_cubic-bezier(0.22,0.61,0.36,1)_0.15s_both] md:block">
-        <PhoneMockup />
+        {/* Hidden on phones; shown from md up */}
+        <div className="relative mx-auto hidden w-full motion-safe:animate-[rise_0.8s_cubic-bezier(0.22,0.61,0.36,1)_0.15s_both] md:block">
+          <PhoneMockup />
+        </div>
       </div>
     </section>
   );
 }
 
 //Problem
-
 const problems: { icon: LucideIcon; title: string; text: string }[] = [
   {
     icon: FileQuestion,
@@ -335,7 +318,6 @@ function Problem() {
       <div className="grid gap-[clamp(2rem,8vw,3rem)] lg:grid-cols-2 lg:gap-x-16 lg:gap-y-10">
         <Reveal className="lg:col-start-1 lg:row-start-1">
           <SectionHeading
-            eyebrow="01 · The Problem"
             title="Your Business Is Real. Your Paper Trail Isn’t."
             text="Plenty of South African businesses are doing well and still get turned away. Here’s why."
           />
@@ -345,7 +327,7 @@ function Problem() {
           <Photo
             src={IMAGES.problem}
             label="A small trader serving customers at a market stall"
-            className="h-[clamp(11rem,32svh,16rem)] lg:h-full lg:min-h-[28rem]"
+            className="h-56 sm:h-64 lg:h-full lg:min-h-[28rem]"
           >
             <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19]/55 via-transparent to-transparent" />
             <p className="absolute bottom-4 left-4 right-4 text-sm font-medium text-white">
@@ -408,13 +390,36 @@ function CreditPassportCard() {
   );
 }
 
+function LaptopMockup() {
+  return (
+    <div
+      className="relative mx-auto w-full max-w-xl"
+      role="img"
+      aria-label="The ZakaScore dashboard shown on a laptop"
+    >
+      <div className="rounded-t-2xl border border-black/70 bg-[#0B0F19] px-[2.5%] pb-0 pt-[2.5%] shadow-[0_28px_56px_-18px_rgba(16,24,40,0.35)]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/dashboard-preview.png"
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="block aspect-[16/10] w-full rounded-t-md bg-white object-cover object-top"
+        />
+      </div>
+      <div className="mx-auto -ml-[4%] h-3 w-[108%] rounded-b-2xl border border-black/10 bg-gradient-to-b from-slate-200 to-slate-400">
+        <div className="mx-auto h-1 w-16 rounded-b-md bg-slate-400/80" />
+      </div>
+    </div>
+  );
+}
+
 function Solution() {
   return (
     <Section id="solution" tone="white">
       <div className="grid items-center gap-[clamp(2.5rem,10vw,3.5rem)] lg:grid-cols-2 lg:gap-16">
         <Reveal delay={120} className="lg:order-2">
           <SectionHeading
-            eyebrow="02 · The Solution"
             title="Turn Everyday Sales Into a Credit Profile That Speaks for You"
           />
           <p className="mt-4 text-base leading-relaxed text-slate-600">
@@ -434,7 +439,7 @@ function Solution() {
         </Reveal>
 
         <Reveal className="lg:order-1">
-          <CreditPassportCard />
+          <LaptopMockup />
         </Reveal>
       </div>
     </Section>
@@ -457,18 +462,38 @@ const steps = [
   },
 ];
 
-function ChatPreview() {
+function PhoneScreenshot() {
+  const thickness = Array.from({ length: 12 });
   return (
-    <div className={`mx-auto w-full max-w-md rounded-3xl p-[clamp(1rem,5vw,1.25rem)] ${glass}`}>
-      <div className="space-y-3">
-        <ChatBubble from="you">Sold 3 airtime vouchers, R150 total, cash</ChatBubble>
-        <ChatBubble from="ai">I understood R150.00, paid cash. Is that right?</ChatBubble>
-        <div className={`rounded-2xl p-4 ${glassInner}`}>
-          <p className="text-xs text-slate-500">Review sale</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums text-[#0B0F19]">R150.00</p>
-          <p className="text-xs text-slate-500">3 × airtime voucher · Paid by cash</p>
-          <div className="mt-3 flex items-center justify-center rounded-xl border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] py-2 text-xs font-semibold text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)]">
-            Confirm and Record
+    <div
+      role="img"
+      aria-label="The ZakaScore app showing a sale being logged"
+      className="relative mx-auto flex aspect-square w-full max-w-sm items-center justify-center overflow-hidden rounded-3xl border border-black/[0.06] bg-gradient-to-bl from-[#bef264] via-[#d9f99d] to-[#f7fee7]"
+    >
+      <div className="absolute bottom-[8%] left-1/2 h-8 w-40 -translate-x-1/2 rounded-full bg-[#0B0F19]/25 blur-2xl" />
+
+      <div className="[perspective:1300px]">
+        <div className="relative aspect-[9/19.5] w-[7.5rem] [transform-style:preserve-3d] [transform:rotateX(14deg)_rotateY(26deg)_rotateZ(-16deg)] sm:w-[8.5rem]">
+          {thickness.map((_, i) => (
+            <div
+              key={i}
+              className="absolute inset-0 rounded-[2rem] bg-[#111827]"
+              style={{ transform: `translateZ(-${(i + 1) * 1.5}px)` }}
+            />
+          ))}
+
+          <div className="absolute inset-0 rounded-[2rem] border border-white/10 bg-[#0B0F19] p-[5px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.12)]">
+            <div className="relative h-full overflow-hidden rounded-[1.65rem] bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logging-preview.png"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="block h-full w-full object-cover object-top"
+              />
+              <div className="absolute left-1/2 top-2 h-3.5 w-14 -translate-x-1/2 rounded-full bg-[#0B0F19]" />
+            </div>
           </div>
         </div>
       </div>
@@ -482,7 +507,7 @@ function HowItWorks() {
       <div className="grid items-center gap-[clamp(2.5rem,10vw,3.5rem)] lg:grid-cols-2 lg:gap-16">
         <div>
           <Reveal>
-            <SectionHeading eyebrow="03 · How It Works" title="From Daily Sales to Credit Score in 3 Steps" />
+            <SectionHeading  title="From Daily Sales to Credit Score in 3 Steps" />
           </Reveal>
           <ol className="mt-[clamp(2rem,8vw,2.5rem)] space-y-8">
             {steps.map((step, index) => (
@@ -499,7 +524,7 @@ function HowItWorks() {
           </ol>
         </div>
         <Reveal delay={150}>
-          <ChatPreview />
+          <PhoneScreenshot />
         </Reveal>
       </div>
     </Section>
@@ -555,7 +580,7 @@ function Faq() {
     <Section id="faq" tone="white">
       <div className="max-w-3xl">
         <Reveal>
-          <SectionHeading eyebrow="04 · FAQ" title="Questions You Might Have" />
+          <SectionHeading  title="Questions You Might Have" />
         </Reveal>
         <Reveal delay={80} className="mt-[clamp(2rem,8vw,2.5rem)] border-t border-black/[0.08]">
           {objections.map(({ title, text }) => (
@@ -732,7 +757,7 @@ function Footer() {
 //Page
 export default function Home() {
   return (
-    <div className="min-h-screen overflow-x-clip bg-white font-sans text-[#0B0F19] antialiased">
+    <div className="landing min-h-screen overflow-x-clip bg-white font-sans text-[#0B0F19] antialiased">
       <Navbar />
       <main>
         <Hero />
