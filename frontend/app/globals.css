@@ -2264,3 +2264,49 @@ button.nav-link {
 .landing :is(h1, h2, h3) {
   font-weight: 500;
 }
+
+/* PWA logging screen: stronger text contrast on phones */
+@media (max-width: 767px) {
+  .pwa-app .text-slate-400 { color: #64748b; }
+  .pwa-app .text-slate-500 { color: #475569; }
+  .pwa-app .text-slate-600 { color: #334155; }
+  .pwa-app .text-slate-700 { color: #1e293b; }
+  .pwa-app textarea::placeholder { color: #64748b; }
+}
+/* Dashboard drawer: solid, stable, and locks the page behind it */
+@media (max-width: 767px) {
+  .sidebar {
+    background: #ffffff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-right: 1px solid rgba(16, 24, 40, 0.08);
+    height: 100svh;
+    overscroll-behavior: contain;
+    will-change: transform;
+    visibility: hidden;
+    transition: transform 280ms var(--ease), box-shadow 280ms var(--ease), visibility 0s linear 280ms;
+  }
+
+  .sidebar.open {
+    visibility: visible;
+    transition: transform 280ms var(--ease), box-shadow 280ms var(--ease), visibility 0s;
+  }
+
+  .sidebar-backdrop {
+    background: rgba(16, 24, 40, 0.45);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    touch-action: none;
+  }
+
+  /* Freeze the page behind the open drawer */
+  html:has(body.menu-open) {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  body.menu-open {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+}

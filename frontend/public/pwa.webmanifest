@@ -2,17 +2,18 @@
   "id": "/workspace",
   "name": "ZakaScore",
   "short_name": "ZakaScore",
-  "description": "Financial intelligence for your business.",
+  "description": "Log sales and build your credit profile.",
+  "lang": "en-ZA",
   "start_url": "/workspace",
   "scope": "/workspace",
   "display": "standalone",
-  "background_color": "#f9fafb",
-  "theme_color": "#111827",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "categories": ["finance", "business"],
   "icons": [
-    {
-      "src": "/zakascore.png",
-      "sizes": "any",
-      "type": "image/png"
-    }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

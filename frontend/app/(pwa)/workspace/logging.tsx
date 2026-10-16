@@ -6,6 +6,7 @@ import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
+  ArrowUpRight,
   BarChart3,
   Bell,
   Download,
@@ -13,6 +14,7 @@ import {
   LayoutDashboard,
   Lightbulb,
   Menu,
+  Plus,
   RefreshCw,
   Settings,
   Share,
@@ -69,6 +71,12 @@ type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
+
+declare global {
+  interface Window {
+    __zsInstallPrompt?: InstallPromptEvent;
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /*  Design tokens                                                             */
@@ -397,6 +405,7 @@ export default function LoggingApp() {
   // Starts true so the card never flashes before we've checked localStorage.
   const [installDismissed, setInstallDismissed] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [installReveal, setInstallReveal] = useState(false);
 
   const addMessage = useCallback((speaker: ChatMessage["speaker"], text: string) => {
     messageId.current += 1;
@@ -445,54 +454,59 @@ export default function LoggingApp() {
     }
   }, [replaceQueue, storeId]);
 
-  useEffect(() => {
-    const onOnline = () => {
-      setOnline(true);
-      void syncQueue();
-    };
-    const onOffline = () => setOnline(false);
-    const onInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as InstallPromptEvent);
-    };
-    const onInstalled = () => {
-      setInstallPrompt(null);
-      setInstalled(true);
-    };
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    window.addEventListener("beforeinstallprompt", onInstallPrompt);
-    window.addEventListener("appinstalled", onInstalled);
-    return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-      window.removeEventListener("beforeinstallprompt", onInstallPrompt);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, [syncQueue]);
+ useEffect(() => {
+  const onOnline = () => {
+    setOnline(true);
+    void syncQueue();
+  };
+  const onOffline = () => setOnline(false);
+  const onInstallAvailable = () => setInstallPrompt(window.__zsInstallPrompt ?? null);
+  const onInstalled = () => {
+    setInstallPrompt(null);
+    setInstalled(true);
+  };
+  // The layout script may have caught the event before this component mounted.
+  if (window.__zsInstallPrompt) setInstallPrompt(window.__zsInstallPrompt);
+  window.addEventListener("online", onOnline);
+  window.addEventListener("offline", onOffline);
+  window.addEventListener("zs-install-available", onInstallAvailable);
+  window.addEventListener("appinstalled", onInstalled);
+  return () => {
+    window.removeEventListener("online", onOnline);
+    window.removeEventListener("offline", onOffline);
+    window.removeEventListener("zs-install-available", onInstallAvailable);
+    window.removeEventListener("appinstalled", onInstalled);
+  };
+}, [syncQueue]);
 
   // Work out whether the install card should be offered on this device.
   useEffect(() => {
-    let cancelled = false;
-    void Promise.resolve().then(() => {
-      if (cancelled) return;
-      const runningAsApp =
-        window.matchMedia("(display-mode: standalone)").matches ||
-        (navigator as Navigator & { standalone?: boolean }).standalone === true;
-      setStandalone(runningAsApp);
-      // iPhones and iPads never fire beforeinstallprompt, so show them the manual steps instead.
-      setIsIos(/iphone|ipad|ipod/i.test(navigator.userAgent));
-      try {
-        const last = Number(window.localStorage.getItem(INSTALL_DISMISS_KEY) ?? 0);
-        setInstallDismissed(Date.now() - last < INSTALL_SNOOZE_MS);
-      } catch {
-        setInstallDismissed(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  let cancelled = false;
+  void Promise.resolve().then(() => {
+    if (cancelled) return;
+    const runningAsApp =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setStandalone(runningAsApp);
+    // iPhones and iPads never fire beforeinstallprompt. iPadOS also reports itself as a Mac.
+    setIsIos(
+      /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
+    );
+    try {
+      const last = Number(window.localStorage.getItem(INSTALL_DISMISS_KEY) ?? 0);
+      setInstallDismissed(Date.now() - last < INSTALL_SNOOZE_MS);
+    } catch {
+      setInstallDismissed(false);
+    }
+  });
+  // Let the screen settle before the sheet slides up.
+  const timer = window.setTimeout(() => setInstallReveal(true), 3500);
+  return () => {
+    cancelled = true;
+    window.clearTimeout(timer);
+  };
+}, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -854,7 +868,7 @@ export default function LoggingApp() {
   const needsPayment = !!draft && draft.amount_zar !== null && draft.payment_method === null;
   const showWelcome = messages.length <= 1 && !draft;
   const composerDisabled = busy || !storeId || !canLog;
-  const showInstallCard = !standalone && !installed && !installDismissed && (!!installPrompt || isIos);
+  const showInstallCard = installReveal && !standalone && !installed && !installDismissed && (!!installPrompt || isIos);
 
   if (loadingStores) {
     return (
@@ -1043,60 +1057,65 @@ export default function LoggingApp() {
   /* -------------------------------- Layout -------------------------------- */
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-white text-[#0B0F19]">
-      {/* Floating install card (reappears if the app is uninstalled) */}
+    <div className="pwa-app flex h-dvh overflow-hidden bg-white text-[#0B0F19]">
+      {/* Install sheet */}
       {showInstallCard && (
         <div
           role="dialog"
           aria-label="Install ZakaScore"
-          className="pointer-events-none fixed inset-x-0 top-[4.5rem] z-30 px-[clamp(1rem,5vw,1.5rem)]"
+          className="pointer-events-none fixed inset-x-0 bottom-0 z-50 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:bottom-6 md:left-auto md:right-6 md:w-96 md:px-0 md:pb-0"
         >
-          <div
-            className={`pointer-events-auto mx-auto flex w-full max-w-md items-start gap-3 rounded-2xl p-4 md:mr-0 motion-safe:animate-[rise_0.4s_cubic-bezier(0.22,0.61,0.36,1)_both] ${glassPanel}`}
-          >
-            <span
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#65a30d]/20 bg-[#f7fee7] text-[#4d7c0f] ${softShadow}`}
-            >
-              <Download className="h-5 w-5" aria-hidden="true" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Install ZakaScore</p>
-              {installPrompt ? (
-                <>
-                  <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
-                    Add it to your home screen to log sales faster, even offline.
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void installApp()}
-                      className={`${limeBtn} min-h-10 flex-1 rounded-xl px-4 text-sm font-medium`}
-                    >
-                      Install app
-                    </button>
-                    <button
-                      type="button"
-                      onClick={dismissInstall}
-                      className="min-h-10 rounded-xl px-3 text-sm font-medium text-slate-600 transition hover:bg-black/5"
-                    >
-                      Not now
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
-                  Tap <Share className="inline h-3.5 w-3.5 align-[-2px]" aria-hidden="true" /> Share, then “Add to Home Screen”.
-                </p>
-              )}
-            </div>
+          <div className="pointer-events-auto relative rounded-3xl border border-black/10 bg-white p-5 shadow-[0_-8px_40px_-8px_rgba(16,24,40,0.28)] motion-safe:animate-[rise_0.45s_cubic-bezier(0.22,0.61,0.36,1)_both]">
             <button
               type="button"
               aria-label="Dismiss"
               onClick={dismissInstall}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-black/5"
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-black/5"
             >
               <X className="h-4 w-4" aria-hidden="true" />
             </button>
+
+            <div className="flex items-center gap-3 pr-8">
+              <BrandMark className="h-12 w-12" />
+              <div>
+                <p className="text-base font-semibold tracking-tight">Install ZakaScore</p>
+                <p className="text-sm leading-snug text-slate-600">Log sales from your home screen, even offline.</p>
+              </div>
+            </div>
+
+            {installPrompt ? (
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={dismissInstall}
+                  className="min-h-12 rounded-xl border border-black/10 bg-white text-sm font-medium text-[#0B0F19]"
+                >
+                  Not now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void installApp()}
+                  className={`${limeBtn} min-h-12 rounded-xl text-sm font-semibold`}
+                >
+                  Install app
+                </button>
+              </div>
+            ) : (
+              <ol className="mt-5 space-y-3 text-sm text-slate-700">
+                <li className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f7fee7] text-xs font-semibold text-[#4d7c0f]">1</span>
+                  <span>Tap the <Share className="inline h-4 w-4 align-[-3px]" aria-hidden="true" /> <strong>Share</strong> button in Safari</span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f7fee7] text-xs font-semibold text-[#4d7c0f]">2</span>
+                  <span>Scroll and tap <Plus className="inline h-4 w-4 align-[-3px]" aria-hidden="true" /> <strong>Add to Home Screen</strong></span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f7fee7] text-xs font-semibold text-[#4d7c0f]">3</span>
+                  <span>Tap <strong>Add</strong>. Done.</span>
+                </li>
+              </ol>
+            )}
           </div>
         </div>
       )}
@@ -1136,46 +1155,35 @@ export default function LoggingApp() {
       )}
 
       {/* Chat column */}
-      <div className="relative isolate flex min-w-0 flex-1 flex-col">
+        <div className="relative isolate flex min-w-0 flex-1 flex-col bg-[radial-gradient(ellipse_90%_45%_at_50%_0%,#f7fee7_0%,#ffffff_75%)]">
+          <header className="flex h-14 max-md:h-16 shrink-0 items-center gap-3 border-b border-black/10 bg-white px-3 md:border-black/[0.07] md:bg-white/70 md:backdrop-blur-xl md:backdrop-saturate-150 sm:px-5">
+            <button
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
+              aria-label={menuOpen ? "Close app menu" : "Open app menu"}
+              aria-expanded={menuOpen}
+              aria-controls="logging-app-menu"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <Menu className="h-5 w-5" aria-hidden="true" />
+            </button>
 
-        <header className="flex h-14 max-md:h-16 shrink-0 items-center gap-3 border-b border-black/[0.07] bg-white/70 px-3 backdrop-blur-xl backdrop-saturate-150 sm:px-5">
-          <button
-            type="button"
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
-            aria-label={menuOpen ? "Close app menu" : "Open app menu"}
-            aria-expanded={menuOpen}
-            aria-controls="logging-app-menu"
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            <Menu className="h-5 w-5" aria-hidden="true" />
-          </button>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-base font-semibold leading-tight tracking-tight">Log a sale</h1>
+              <p className="truncate text-xs text-slate-500">
+                {selectedStore ? selectedStore.store_name : "No PWA-enabled store is available."}
+              </p>
+            </div>
 
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[15px] font-semibold leading-tight tracking-tight">Log a sale</h1>
-            <p className="truncate text-xs text-slate-500">
-              {selectedStore ? `Logging to ${selectedStore.store_name}` : "No PWA-enabled store is available."}
-            </p>
-          </div>
-
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.07] bg-white/80 px-2.5 py-1 text-xs text-slate-600 ${softShadow}`}
-          >
-            <i
-              className={`h-1.5 w-1.5 rounded-full ${online ? "bg-[#65a30d]" : "bg-amber-500"}`}
-              aria-hidden="true"
-            />
-            {online ? "Online" : "Offline"}
-          </span>
-
-          <button
-            type="button"
-            onClick={resetChat}
-            className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
-            aria-label="New sale"
-          >
-            <SquarePen className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </header>
+            <button
+              type="button"
+              onClick={resetChat}
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
+              aria-label="New sale"
+            >
+              <SquarePen className="h-5 w-5" aria-hidden="true" />
+            </button>
+          </header>
 
         {/* Conversation */}
         <div className="flex-1 overflow-y-auto">
@@ -1187,15 +1195,18 @@ export default function LoggingApp() {
           >
             {showWelcome ? (
               <div className="my-auto flex flex-col items-center py-[clamp(2rem,10vw,3.5rem)] text-center md:py-10">
-                <BrandMark className="h-14 w-14 text-2xl" />
-                <h2 className="mt-6 text-[clamp(1.25rem,6vw,1.5rem)] font-semibold tracking-tight sm:text-3xl">
+                <div className="relative">
+                  <div aria-hidden="true" className="absolute inset-0 -z-10 scale-[2.4] rounded-full bg-[#A3E635]/35 blur-2xl" />
+                  <BrandMark className="h-16 w-16 rounded-2xl" />
+                </div>
+                <h2 className="mt-7 text-[clamp(1.5rem,7vw,1.875rem)] font-semibold tracking-tight sm:text-3xl">
                   What did you sell?
                 </h2>
-                <p className="mt-2 max-w-md text-[clamp(0.8125rem,3.5vw,0.875rem)] leading-relaxed text-slate-600">
+                <p className="mt-2 max-w-sm text-[clamp(0.875rem,3.6vw,0.9375rem)] leading-relaxed text-slate-600">
                   {GREETING}
                 </p>
-                <div className="mt-[clamp(1.75rem,8vw,2rem)] flex flex-wrap justify-center gap-2 max-md:w-full max-md:max-w-sm max-md:flex-col max-md:gap-3">
-                  {EXAMPLE_PROMPTS.map((prompt) => (
+                <div className="mt-8 grid w-full max-w-sm gap-3">
+                  {EXAMPLE_PROMPTS.map((prompt, index) => (
                     <button
                       key={prompt}
                       type="button"
@@ -1204,9 +1215,11 @@ export default function LoggingApp() {
                         setEntry(prompt);
                         textareaRef.current?.focus();
                       }}
-                      className={`rounded-full border border-black/[0.08] bg-white/80 px-4 py-2 text-sm text-slate-700 backdrop-blur transition hover:border-[#65a30d]/40 hover:text-[#4d7c0f] disabled:cursor-not-allowed disabled:opacity-50 max-md:w-full max-md:py-3 max-md:text-[clamp(0.8125rem,3.5vw,0.875rem)] ${softShadow}`}
+                      style={{ animationDelay: `${index * 90}ms` }}
+                      className={`group flex w-full items-center justify-between gap-3 rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-left text-sm font-medium text-[#0B0F19] transition hover:border-[#65a30d]/50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 motion-safe:animate-[rise_0.5s_cubic-bezier(0.22,0.61,0.36,1)_both] ${softShadow}`}
                     >
-                      {prompt}
+                      <span>{prompt}</span>
+                      <ArrowUpRight className="h-4 w-4 shrink-0 text-[#4d7c0f] transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
                     </button>
                   ))}
                 </div>
@@ -1215,7 +1228,10 @@ export default function LoggingApp() {
               <div className="grid gap-[clamp(1.25rem,6vw,1.5rem)]">
                 {messages.map((message) =>
                   message.speaker === "you" ? (
-                    <div key={message.id} className="flex justify-end">
+                    <div
+                      key={message.id}
+                      className="flex justify-end motion-safe:animate-[rise_0.35s_cubic-bezier(0.22,0.61,0.36,1)_both]"
+                    >
                       <p
                         className={`${limeGloss} max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm leading-relaxed [overflow-wrap:anywhere]`}
                       >
@@ -1223,9 +1239,14 @@ export default function LoggingApp() {
                       </p>
                     </div>
                   ) : (
-                    <div key={message.id} className="flex items-start gap-3">
+                    <div
+                      key={message.id}
+                      className="flex items-start gap-3 motion-safe:animate-[rise_0.35s_cubic-bezier(0.22,0.61,0.36,1)_both]"
+                    >
                       <BrandMark className="mt-0.5 h-8 w-8 text-sm" />
-                      <p className="max-w-[85%] pt-1 text-sm leading-relaxed text-[#0B0F19] [overflow-wrap:anywhere]">
+                      <p
+                        className={`max-w-[85%] rounded-2xl rounded-tl-md border border-black/[0.08] bg-white px-4 py-2.5 text-sm leading-relaxed text-[#0B0F19] [overflow-wrap:anywhere] ${softShadow}`}
+                      >
                         {message.text}
                       </p>
                     </div>
