@@ -5,7 +5,16 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { authClient } from "@/lib/auth/client";
 import { redeemConnectCode } from "@/lib/connect-code";
-import { AuthShell, ConnectCodeField, Field, FormAlert, limeButton, textLink } from "@/components/auth-ui";
+import {
+  AuthShell,
+  CheckboxField,
+  ConnectCodeField,
+  Field,
+  FormAlert,
+  PasswordField,
+  limeButton,
+  textLink,
+} from "@/components/auth-ui";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -18,11 +27,21 @@ export default function SignUpPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+
+    const form = new FormData(event.currentTarget);
+
+    if (!accountCreated.current) {
+      const password = String(form.get("password"));
+      const confirmPassword = String(form.get("confirmPassword"));
+      if (password !== confirmPassword) {
+        setError("Passwords do not match. Please check both fields and try again.");
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
-      const form = new FormData(event.currentTarget);
-
       if (!accountCreated.current) {
         const result = await authClient.signUp.email({
           name: String(form.get("name")),
@@ -85,16 +104,41 @@ export default function SignUpPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Name" name="name" autoComplete="name" required />
         <Field label="Email" name="email" type="email" autoComplete="email" required />
-        <Field
+        <PasswordField
           label="Password"
           name="password"
-          type="password"
           autoComplete="new-password"
           minLength={8}
           required
           placeholder="At least 8 characters"
         />
+        <PasswordField
+          label="Confirm Password"
+          name="confirmPassword"
+          autoComplete="new-password"
+          minLength={8}
+          required
+          placeholder="Re-enter your password"
+        />
         <ConnectCodeField value={code} onChange={setCode} />
+
+        <div className="space-y-3 pt-1">
+          <CheckboxField name="acceptPrivacy" required>
+            I have read and accept the{" "}
+            <Link href="/privacy" target="_blank" rel="noopener noreferrer" className={textLink}>
+              Privacy Policy
+            </Link>
+            .
+          </CheckboxField>
+          <CheckboxField name="acceptTerms" required>
+            I agree to the{" "}
+            <Link href="/terms" target="_blank" rel="noopener noreferrer" className={textLink}>
+              Terms of Service
+            </Link>
+            .
+          </CheckboxField>
+        </div>
+
         <button type="submit" disabled={loading} className={limeButton}>
           {loading ? "Creating Account…" : "Create Account"}
         </button>
