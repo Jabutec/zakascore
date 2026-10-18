@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { authClient } from "@/lib/auth/client";
+import { AUTH_MSG, friendlyConnectCodeError, friendlySignUpError, isOffline } from "@/lib/auth/friendly-errors";
 import { redeemConnectCode } from "@/lib/connect-code";
 import {
   AuthShell,
@@ -34,9 +35,14 @@ export default function SignUpPage() {
       const password = String(form.get("password"));
       const confirmPassword = String(form.get("confirmPassword"));
       if (password !== confirmPassword) {
-        setError("Passwords do not match. Please check both fields and try again.");
+        setError("Your passwords don’t match. Check both fields and try again.");
         return;
       }
+    }
+
+    if (isOffline()) {
+      setError(AUTH_MSG.network);
+      return;
     }
 
     setLoading(true);
@@ -44,13 +50,13 @@ export default function SignUpPage() {
     try {
       if (!accountCreated.current) {
         const result = await authClient.signUp.email({
-          name: String(form.get("name")),
-          email: String(form.get("email")),
+          name: String(form.get("name")).trim(),
+          email: String(form.get("email")).trim(),
           password: String(form.get("password")),
         });
 
         if (result.error) {
-          setError(result.error.message || "Unable to create your account.");
+          setError(friendlySignUpError(result.error));
           return;
         }
         accountCreated.current = true;
@@ -68,7 +74,7 @@ export default function SignUpPage() {
         const redeemed = await redeemConnectCode(connectCode);
         if (!redeemed.ok) {
           setError(
-            `Your account was created, but the connect code could not be used (${redeemed.message}). Fix the code and try again, or clear it to set up a business instead.`,
+            `Your account was created, but ${friendlyConnectCodeError(redeemed.message).replace(/^./, (c) => c.toLowerCase())} Fix the code, or clear it to set up your own business instead.`,
           );
           return;
         }
@@ -79,8 +85,13 @@ export default function SignUpPage() {
 
       router.replace("/connect");
       router.refresh();
-    } catch {
-      setError("Could not reach Neon Auth. Check your connection and try again.");
+    } catch (caught) {
+      console.error("Sign-up request failed", caught);
+      setError(
+        accountCreated.current
+          ? "Your account was created, but we lost the connection. Please sign in to continue."
+          : AUTH_MSG.network,
+      );
     } finally {
       setLoading(false);
     }

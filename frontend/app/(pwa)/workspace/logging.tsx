@@ -2,14 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
   ArrowUpRight,
   BarChart3,
   Bell,
-  Download,
   Gauge,
   LayoutDashboard,
   Lightbulb,
@@ -30,8 +29,6 @@ const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
 const MAX_QUEUED_TRANSACTIONS = 500;
 const QUEUE_PREFIX = "zakascore-pwa-queue:";
 const WORKSPACE_KEY = "zakascore-pwa-workspace";
-const INSTALL_DISMISS_KEY = "zakascore-pwa-install-dismissed";
-const INSTALL_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000; // ask again after a week
 
 type PaymentMethod = "cash" | "digital";
 type Role = "owner" | "admin" | "employee" | "viewer";
@@ -80,9 +77,7 @@ declare global {
 
 /* -------------------------------------------------------------------------- */
 /*  Design tokens                                                             */
-/*  ~60% white · ~30% lime (same as the landing page) · ~10% black    */
-/*  Lime #A3E635 fills carry dark text; #4d7c0f is the readable lime-toned    */
-/*  text colour on white. Headings: semibold only.                            */
+/*  ~60% white · ~30% lime (same as the landing page) · ~10% black            */
 /* -------------------------------------------------------------------------- */
 
 const softShadow =
@@ -91,8 +86,6 @@ const softShadow =
 const deepShadow =
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_1px_1px_rgba(16,24,40,0.04),0_2px_4px_rgba(16,24,40,0.04),0_8px_16px_-4px_rgba(16,24,40,0.06),0_24px_48px_-16px_rgba(16,24,40,0.12)]";
 
-/* Glossy lime button: gradient + inset top highlight + faint gloss band.
-   The shadow underneath is neutral grey, so no lime glow is cast onto the white. */
 const limeGloss =
   "relative isolate overflow-hidden border border-[#65a30d]/50 bg-gradient-to-b from-[#bef264] to-[#A3E635] text-[#0B0F19] shadow-[inset_0_1px_0_rgba(255,255,255,0.6),0_1px_2px_rgba(16,24,40,0.12)] before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:-z-10 before:h-1/2 before:bg-gradient-to-b before:from-white/40 before:to-transparent";
 
@@ -104,8 +97,9 @@ const glassPanel = `border border-black/[0.07] bg-gradient-to-b from-white/90 to
 const navBase =
   "flex min-h-10 w-full items-center gap-3 rounded-xl border border-transparent px-3 text-sm transition max-md:min-h-12";
 
+// 16px on phones stops iOS zooming into the field when it is tapped
 const selectClass =
-  "w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-[#0B0F19] outline-none transition focus:border-[#65a30d]/50 disabled:opacity-60";
+  "w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-base text-[#0B0F19] outline-none transition focus:border-[#65a30d]/50 disabled:opacity-60 md:text-sm";
 
 const EXAMPLE_PROMPTS = [
   "Sold 2 shirts for R300, cash",
@@ -124,7 +118,61 @@ const APP_NAV: { label: string; href: string; icon: LucideIcon }[] = [
 const GREETING = "Tell me about a sale and I’ll prepare it for your review.";
 
 /* -------------------------------------------------------------------------- */
-/*  Local engine + parsing helpers (unchanged logic)                          */
+/*  Friendly error messages                                                   */
+/*  Users only ever see these. Technical details go to the console.           */
+/* -------------------------------------------------------------------------- */
+
+const MSG = {
+  network: "We couldn’t connect. Check your internet and try again.",
+  server: "Something went wrong on our side. Please try again in a moment.",
+  session: "Your session has ended. Please sign in again.",
+  permission: "You don’t have permission to do that.",
+  tooMany: "That’s a lot of requests at once. Wait a moment and try again.",
+  saveRejected: "We couldn’t save that sale. Check the amount and payment type, then try again.",
+  notFound: "We couldn’t find that. Refresh the page and try again.",
+  storesLoad: "We couldn’t load your business yet. Check your connection and try again.",
+  offlineNoData: "You’re offline and nothing is saved on this device yet. Connect once to get started.",
+  usingSaved: "You’re viewing your saved workspace. New sales will sync when we’re back online.",
+  syncWaiting: "Your saved sales will sync when you’re back online.",
+  syncStuck: "We couldn’t sync one of your saved sales yet. We’ll keep trying.",
+  storage: "Your phone is out of storage, so we couldn’t save this sale offline. Free up some space and try again.",
+  queueFull: "Too many sales are waiting to sync. Reconnect so they can upload, then add more.",
+  queueUnreadable: "Some saved sales couldn’t be read. They haven’t been deleted.",
+  assistantUnsupported: "The smart assistant isn’t supported on this phone. Basic matching still works.",
+  assistantFailed: "We couldn’t turn on the smart assistant. You can keep logging without it.",
+  noStore: "No store is set up for logging yet. Ask the business owner to turn on sale logging.",
+  generic: "Something went wrong. Please try again.",
+} as const;
+
+function messageForStatus(status: number, context: "save" | "load" = "load"): string {
+  if (status === 401) return MSG.session;
+  if (status === 403) return MSG.permission;
+  if (status === 404) return MSG.notFound;
+  if (status === 408 || status === 429) return MSG.tooMany;
+  if (status >= 500) return MSG.server;
+  if (status >= 400) return context === "save" ? MSG.saveRejected : MSG.generic;
+  return MSG.generic;
+}
+
+function isNetworkError(error: unknown) {
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError"))
+  );
+}
+
+/* Only used to recognise one specific, expected server answer. Never shown to the user. */
+async function readDetail(response: Response): Promise<string> {
+  const body: unknown = await response.json().catch(() => ({}));
+  if (body && typeof body === "object" && "detail" in body) {
+    const detail = (body as { detail?: unknown }).detail;
+    if (typeof detail === "string") return detail;
+  }
+  return "";
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Local engine + parsing helpers                                            */
 /* -------------------------------------------------------------------------- */
 
 async function createLocalEngine(onProgress: (message: string) => void) {
@@ -271,9 +319,8 @@ function parseFollowUpPayment(text: string): PaymentMethod | null {
 }
 
 /*
-  Basic on-device fallback used when the WebLLM assistant isn't loaded
-  (e.g. no WebGPU). With the manual form gone, this keeps the single message
-  bar usable everywhere. Prefers an amount marked with R/ZAR, otherwise the
+  Basic on-device matching, used when the smart assistant isn't switched on
+  or fails on a message. Prefers an amount marked with R/ZAR, otherwise the
   last number in the message.
 */
 function parseSaleLocally(text: string): SaleDraft | null {
@@ -298,7 +345,7 @@ function loadQueue(storeId: string): QueuedTransaction[] {
   if (!raw) return [];
   const entries: unknown = JSON.parse(raw);
   if (!Array.isArray(entries) || entries.length > MAX_QUEUED_TRANSACTIONS) {
-    throw new Error("Saved offline sales could not be read. They have not been deleted.");
+    throw new Error("Queue could not be read");
   }
   const isQueuedTransaction = (entry: unknown): entry is QueuedTransaction =>
     !!entry &&
@@ -309,7 +356,7 @@ function loadQueue(storeId: string): QueuedTransaction[] {
     ["cash", "digital"].includes((entry as QueuedTransaction).payment_method) &&
     typeof (entry as QueuedTransaction).transaction_date === "string";
   if (!entries.every(isQueuedTransaction)) {
-    throw new Error("Saved offline sales contain invalid data and were left untouched.");
+    throw new Error("Queue contains invalid data");
   }
   return entries;
 }
@@ -320,15 +367,6 @@ function formatAmount(value: number) {
     currency: "ZAR",
     minimumFractionDigits: 2,
   }).format(value);
-}
-
-async function responseError(response: Response): Promise<string> {
-  const body: unknown = await response.json().catch(() => ({}));
-  if (body && typeof body === "object" && "detail" in body) {
-    const detail = (body as { detail?: unknown }).detail;
-    if (typeof detail === "string") return detail;
-  }
-  return `The server could not save this sale (HTTP ${response.status}).`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -348,7 +386,7 @@ function BrandMark({ className = "h-9 w-9" }: { className?: string }) {
 
 function StateScreen({ title, text, href, cta }: { title: string; text: string; href: string; cta: string }) {
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-white p-6 text-[#0B0F19]">
+    <main className="flex min-h-svh items-center justify-center bg-white p-6 text-[#0B0F19]">
       <section className={`w-full max-w-sm rounded-3xl p-8 text-center ${glassPanel}`}>
         <BrandMark className="mx-auto h-12 w-12 text-xl" />
         <h1 className="mt-5 text-xl font-semibold tracking-tight">{title}</h1>
@@ -361,6 +399,49 @@ function StateScreen({ title, text, href, cta }: { title: string; text: string; 
         </Link>
       </section>
     </main>
+  );
+}
+
+/* A small banner for errors, warnings and status. Dismissible, with an optional action. */
+function Notice({
+  tone = "error",
+  children,
+  onDismiss,
+  action,
+}: {
+  tone?: "error" | "warn" | "info";
+  children: ReactNode;
+  onDismiss?: () => void;
+  action?: { label: string; onClick: () => void };
+}) {
+  const toneClass =
+    tone === "error"
+      ? "border-red-200 bg-red-50 text-red-900"
+      : tone === "warn"
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-black/[0.07] bg-white/80 text-slate-600";
+  return (
+    <div
+      role={tone === "error" ? "alert" : "status"}
+      className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-xs leading-relaxed ${toneClass}`}
+    >
+      <p className="min-w-0 flex-1">{children}</p>
+      {action && (
+        <button type="button" onClick={action.onClick} className="shrink-0 font-semibold underline underline-offset-2">
+          {action.label}
+        </button>
+      )}
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss message"
+          className="-mr-1 -mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full opacity-60 transition hover:opacity-100"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -379,6 +460,8 @@ export default function LoggingApp() {
   const [businessId, setBusinessId] = useState("");
   const [storeId, setStoreId] = useState("");
   const [loadingStores, setLoadingStores] = useState(true);
+  const [storesFailed, setStoresFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [authNeeded, setAuthNeeded] = useState(false);
   const [businessSetupNeeded, setBusinessSetupNeeded] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -399,13 +482,10 @@ export default function LoggingApp() {
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
-  const [installed, setInstalled] = useState(false);
   const [standalone, setStandalone] = useState(false);
   const [isIos, setIsIos] = useState(false);
-  // Starts true so the card never flashes before we've checked localStorage.
-  const [installDismissed, setInstallDismissed] = useState(true);
+  const [installSheetOpen, setInstallSheetOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [installReveal, setInstallReveal] = useState(false);
 
   const addMessage = useCallback((speaker: ChatMessage["speaker"], text: string) => {
     messageId.current += 1;
@@ -420,8 +500,9 @@ export default function LoggingApp() {
       queueRef.current = next;
       setQueue(next);
       return true;
-    } catch {
-      setAppError("This device could not save the offline queue. Free up device storage and try again.");
+    } catch (error) {
+      console.error("Could not write the offline queue", error);
+      setAppError(MSG.storage);
       return false;
     }
   }, [storeId]);
@@ -439,74 +520,70 @@ export default function LoggingApp() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify(current),
         });
+        if (response.status === 401) {
+          setSyncMessage("");
+          setAuthNeeded(true);
+          return;
+        }
         if (!response.ok) {
-          setSyncMessage(await responseError(response));
+          console.error("Sync rejected", response.status);
+          setSyncMessage(response.status >= 500 ? MSG.server : MSG.syncStuck);
           return;
         }
         if (!replaceQueue(queueRef.current.slice(1))) return;
       }
       setSyncMessage("All saved sales are synced.");
-    } catch {
-      setSyncMessage("Could not reach the server. Saved sales will sync when you’re online.");
+    } catch (error) {
+      console.error("Sync failed", error);
+      setSyncMessage(MSG.syncWaiting);
     } finally {
       syncInProgress.current = false;
       setSyncing(false);
     }
   }, [replaceQueue, storeId]);
 
- useEffect(() => {
-  const onOnline = () => {
-    setOnline(true);
-    void syncQueue();
-  };
-  const onOffline = () => setOnline(false);
-  const onInstallAvailable = () => setInstallPrompt(window.__zsInstallPrompt ?? null);
-  const onInstalled = () => {
-    setInstallPrompt(null);
-    setInstalled(true);
-  };
-  // The layout script may have caught the event before this component mounted.
-  if (window.__zsInstallPrompt) setInstallPrompt(window.__zsInstallPrompt);
-  window.addEventListener("online", onOnline);
-  window.addEventListener("offline", onOffline);
-  window.addEventListener("zs-install-available", onInstallAvailable);
-  window.addEventListener("appinstalled", onInstalled);
-  return () => {
-    window.removeEventListener("online", onOnline);
-    window.removeEventListener("offline", onOffline);
-    window.removeEventListener("zs-install-available", onInstallAvailable);
-    window.removeEventListener("appinstalled", onInstalled);
-  };
-}, [syncQueue]);
-
-  // Work out whether the install card should be offered on this device.
   useEffect(() => {
-  let cancelled = false;
-  void Promise.resolve().then(() => {
-    if (cancelled) return;
-    const runningAsApp =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    setStandalone(runningAsApp);
-    // iPhones and iPads never fire beforeinstallprompt. iPadOS also reports itself as a Mac.
-    setIsIos(
-      /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
-    );
-    try {
-      const last = Number(window.localStorage.getItem(INSTALL_DISMISS_KEY) ?? 0);
-      setInstallDismissed(Date.now() - last < INSTALL_SNOOZE_MS);
-    } catch {
-      setInstallDismissed(false);
-    }
-  });
-  // Let the screen settle before the sheet slides up.
-  const timer = window.setTimeout(() => setInstallReveal(true), 3500);
-  return () => {
-    cancelled = true;
-    window.clearTimeout(timer);
-  };
-}, []);
+    const onOnline = () => {
+      setOnline(true);
+      void syncQueue();
+    };
+    const onOffline = () => setOnline(false);
+    const onInstallAvailable = () => setInstallPrompt(window.__zsInstallPrompt ?? null);
+    const onInstalled = () => {
+      setInstallPrompt(null);
+    };
+    // The layout script may have caught the event before this component mounted.
+    if (window.__zsInstallPrompt) setInstallPrompt(window.__zsInstallPrompt);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("zs-install-available", onInstallAvailable);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("zs-install-available", onInstallAvailable);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, [syncQueue]);
+
+  // Work out whether we're running inside the installed app, and whether this is iOS.
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      const runningAsApp =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as Navigator & { standalone?: boolean }).standalone === true;
+      setStandalone(runningAsApp);
+      setIsIos(
+        /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+          (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -527,9 +604,10 @@ export default function LoggingApp() {
         if (!navigator.onLine) {
           if (cancelled) return;
           if (cachedWorkspace) {
-            setSyncMessage("Using the saved workspace. New sales will sync when you reconnect.");
+            setSyncMessage(MSG.usingSaved);
           } else {
-            setAppError("You’re offline and nothing is saved on this device yet. Connect once to load your stores.");
+            setStoresFailed(true);
+            setAppError(MSG.offlineNoData);
           }
           return;
         }
@@ -544,17 +622,17 @@ export default function LoggingApp() {
           return;
         }
         if (response.status === 403) {
-          const detail = await responseError(response);
+          const detail = await readDetail(response);
           if (detail === "User does not belong to any merchant") {
             if (!cancelled) setBusinessSetupNeeded(true);
             return;
           }
-          throw new Error(detail);
+          throw new Error(`Businesses request refused (403): ${detail}`);
         }
-        if (!response.ok) throw new Error(await responseError(response));
+        if (!response.ok) throw new Error(`Businesses request failed (${response.status})`);
         const data: unknown = await response.json();
         if (!data || typeof data !== "object" || !("businesses" in data) || !Array.isArray(data.businesses)) {
-          throw new Error("The server returned an invalid business list.");
+          throw new Error("Invalid business list");
         }
         const result = data as { selected_merchant_id: string; businesses: Business[] };
         if (cancelled) return;
@@ -586,18 +664,13 @@ export default function LoggingApp() {
           saveCachedWorkspace(workspace);
         }
       } catch (error) {
+        console.error("Could not load businesses", error);
         if (cancelled) return;
         if (cachedWorkspace) {
-          // Already showing the saved workspace, so just let the user know quietly.
-          setSyncMessage("Couldn’t reach the server, so this is your saved workspace. Sales you log will sync when it’s back.");
+          setSyncMessage(MSG.usingSaved);
         } else {
-          const isNetworkIssue =
-            error instanceof TypeError || (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError"));
-          setAppError(
-            isNetworkIssue || !(error instanceof Error)
-              ? "We couldn’t load your stores yet. Check your connection and refresh the page."
-              : error.message,
-          );
+          setStoresFailed(true);
+          setAppError(isNetworkError(error) ? MSG.storesLoad : MSG.server);
         }
       } finally {
         if (!cancelled) setLoadingStores(false);
@@ -607,7 +680,7 @@ export default function LoggingApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   useEffect(() => {
     if (!storeId) return;
@@ -620,9 +693,8 @@ export default function LoggingApp() {
         setQueue(saved);
         if (navigator.onLine && saved.length > 0) void syncQueue();
       } catch (error) {
-        if (!cancelled) {
-          setAppError(error instanceof Error ? error.message : "Unable to read saved offline sales.");
-        }
+        console.error("Could not read the offline queue", error);
+        if (!cancelled) setAppError(MSG.queueUnreadable);
       }
     });
     return () => {
@@ -645,23 +717,29 @@ export default function LoggingApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
+  function retryStores() {
+    setAppError("");
+    setStoresFailed(false);
+    setLoadingStores(true);
+    setReloadKey((key) => key + 1);
+  }
+
   async function loadAssistant() {
     if (modelLoading || modelReady) return;
     if (!("gpu" in navigator)) {
-      setModelError(
-        "WebGPU isn’t available in this browser. You can still describe sales and I’ll read them with basic on-device matching.",
-      );
+      setModelError(MSG.assistantUnsupported);
       return;
     }
     setModelLoading(true);
     setModelError("");
-    setModelProgress("Preparing the on-device assistant…");
+    setModelProgress("Preparing the smart assistant…");
     try {
       engineRef.current = await createLocalEngine(setModelProgress);
       setModelReady(true);
-      setModelProgress("Assistant ready. Your messages are processed on this device.");
+      setModelProgress("Assistant ready.");
     } catch (error) {
-      setModelError(error instanceof Error ? error.message : "Could not load the on-device assistant.");
+      console.error("Could not load the smart assistant", error);
+      setModelError(MSG.assistantFailed);
     } finally {
       setModelLoading(false);
     }
@@ -720,28 +798,48 @@ export default function LoggingApp() {
 
     setBusy(true);
     try {
-      let sale: SaleDraft | null;
+      let sale: SaleDraft | null = null;
+
       if (modelReady && engineRef.current) {
-        const result = await engineRef.current.chat.completions.create({
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: text },
-          ],
-          temperature: 0,
-          response_format: { type: "json_object" },
-        });
-        sale = parseModelOutput(result.choices[0]?.message.content ?? null);
-      } else {
-        sale = parseSaleLocally(text);
+        try {
+          const result = await engineRef.current.chat.completions.create({
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: text },
+            ],
+            temperature: 0,
+            max_tokens: 120,
+          });
+          sale = parseModelOutput(result.choices[0]?.message.content ?? null);
+        } catch (error) {
+          // The assistant failed on this message, so fall back to basic matching below.
+          console.error("Assistant failed on a message", error);
+          sale = null;
+        }
       }
+
+      // Basic matching covers a failed or empty assistant reply, and fills any gaps in it.
+      const basic = parseSaleLocally(text);
+      if (!sale) {
+        sale = basic;
+      } else if (basic) {
+        sale = {
+          ...sale,
+          amount_zar: sale.amount_zar ?? basic.amount_zar,
+          payment_method: sale.payment_method ?? basic.payment_method,
+        };
+      }
+
       if (!sale) {
         setDraft(null);
-        addMessage("assistant", "I couldn’t identify a sale total. Please describe one completed sale, including its total and payment method.");
+        addMessage("assistant", "I couldn’t find a sale total in that. Try something like “2 shirts, R300, cash”.");
       } else {
+        setModelError("");
         requestMissingDetails(sale);
       }
     } catch (error) {
-      setModelError(error instanceof Error ? error.message : "The on-device assistant could not process that entry.");
+      console.error("Could not read the sale message", error);
+      setAppError(MSG.generic);
     } finally {
       setBusy(false);
     }
@@ -751,7 +849,7 @@ export default function LoggingApp() {
     if (!draft || draft.amount_zar === null || !draft.payment_method || !storeId || busy || !canLog) return;
     const store = stores.find((item) => item.store_id === storeId);
     if (!store) {
-      setAppError("Choose a store that belongs to your business.");
+      setAppError(MSG.noStore);
       return;
     }
     const transaction: QueuedTransaction = {
@@ -774,9 +872,14 @@ export default function LoggingApp() {
           signal: AbortSignal.timeout(30000),
         });
         // Server trouble (5xx): fall through to the offline queue instead of losing the sale
-        if (response.status >= 500) throw new Error("Server unavailable");
+        if (response.status >= 500) throw new Error(`Server unavailable (${response.status})`);
+        if (response.status === 401) {
+          setAuthNeeded(true);
+          return;
+        }
         if (!response.ok) {
-          setAppError(await responseError(response));
+          console.error("Sale rejected", response.status);
+          setAppError(messageForStatus(response.status, "save"));
           return;
         }
         setDraft(null);
@@ -784,48 +887,55 @@ export default function LoggingApp() {
         setSyncMessage("");
       } else {
         if (queueRef.current.length >= MAX_QUEUED_TRANSACTIONS) {
-          setAppError("The offline queue is full. Reconnect and sync saved sales before adding more.");
+          setAppError(MSG.queueFull);
           return;
         }
         if (!replaceQueue([...queueRef.current, transaction])) return;
         setDraft(null);
         addMessage("assistant", "Saved on this device. I’ll sync this sale when you’re back online.");
-        setSyncMessage("Waiting for a connection to sync.");
+        setSyncMessage(MSG.syncWaiting);
       }
-    } catch {
+    } catch (error) {
+      console.error("Could not send the sale, saving offline instead", error);
       if (queueRef.current.length >= MAX_QUEUED_TRANSACTIONS) {
-        setAppError("The server could not be reached and the offline queue is full.");
+        setAppError(MSG.queueFull);
         return;
       }
       if (!replaceQueue([...queueRef.current, transaction])) return;
       setDraft(null);
-      addMessage("assistant", "I couldn’t reach the server, so I saved this sale on your device. It will sync automatically.");
-      setSyncMessage("Waiting for a connection to sync.");
+      addMessage("assistant", "I couldn’t connect, so I saved this sale on your phone. It will sync automatically.");
+      setSyncMessage(MSG.syncWaiting);
     } finally {
       setBusy(false);
     }
   }
 
   function dismissInstall() {
-    setInstallDismissed(true);
-    try {
-      window.localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now()));
-    } catch {
-      return;
-    }
+    setInstallSheetOpen(false);
   }
 
   async function installApp() {
-    if (!installPrompt) return;
+    const promptEvent = installPrompt;
+    if (!promptEvent) return;
     try {
-      await installPrompt.prompt();
-      const choice = await installPrompt.userChoice;
-      if (choice.outcome === "dismissed") dismissInstall();
+      await promptEvent.prompt();
+      const choice = await promptEvent.userChoice;
+      if (choice.outcome === "accepted") setInstallSheetOpen(false);
+    } catch (error) {
+      console.error("Install prompt failed", error);
+      // Fall back to the manual steps
+      setInstallSheetOpen(true);
     } finally {
-      // A prompt event can only be used once. If the app is uninstalled later,
-      // the browser fires a fresh one on the next visit and the card returns.
+      // A prompt event can only be used once.
       setInstallPrompt(null);
+      window.__zsInstallPrompt = undefined;
     }
+  }
+
+  // Android with the native prompt: install straight away. Everything else: show the steps.
+  function openInstall() {
+    if (installPrompt) void installApp();
+    else setInstallSheetOpen(true);
   }
 
   function changeBusiness(nextBusinessId: string) {
@@ -868,11 +978,12 @@ export default function LoggingApp() {
   const needsPayment = !!draft && draft.amount_zar !== null && draft.payment_method === null;
   const showWelcome = messages.length <= 1 && !draft;
   const composerDisabled = busy || !storeId || !canLog;
-  const showInstallCard = installReveal && !standalone && !installed && !installDismissed && (!!installPrompt || isIos);
+  const showInstallButton = !standalone;
+  const showInstallCard = installSheetOpen && showInstallButton;
 
   if (loadingStores) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-white p-6">
+      <main className="flex min-h-svh items-center justify-center bg-white p-6">
         <p className="text-sm text-slate-500">Loading your business workspace…</p>
       </main>
     );
@@ -882,7 +993,7 @@ export default function LoggingApp() {
     return (
       <StateScreen
         title="Sign in to log a sale"
-        text="Your business records are only available after you sign in."
+        text="Your session has ended or you’re not signed in yet. Sign in to keep going."
         href="/login?next=%2Fworkspace"
         cta="Sign in"
       />
@@ -1040,14 +1151,17 @@ export default function LoggingApp() {
             </button>
           )}
         </div>
-        {installPrompt && (
+        {canLog && !modelReady && (
           <button
             type="button"
-            onClick={() => void installApp()}
-            className={`flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-black/10 bg-white text-sm font-medium text-[#0B0F19] transition hover:border-[#65a30d]/40 max-md:min-h-12 ${softShadow}`}
+            disabled={modelLoading || !storeId}
+            onClick={() => void loadAssistant()}
+            className={`flex min-h-10 w-full flex-col items-center justify-center rounded-xl border border-black/10 bg-white px-3 py-2 text-sm font-medium text-[#0B0F19] transition hover:border-[#65a30d]/40 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-12 ${softShadow}`}
           >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Install app
+            <span>{modelLoading ? "Loading smart assistant…" : "Turn on smart assistant"}</span>
+            <span className="text-[11px] font-normal text-slate-500">
+              {modelLoading ? modelProgress || "Preparing…" : "One-time download, uses data"}
+            </span>
           </button>
         )}
       </div>
@@ -1057,7 +1171,7 @@ export default function LoggingApp() {
   /* -------------------------------- Layout -------------------------------- */
 
   return (
-    <div className="pwa-app flex h-dvh overflow-hidden bg-white text-[#0B0F19]">
+    <div className="pwa-app flex h-dvh w-full max-w-full touch-manipulation overflow-hidden overscroll-none bg-white text-[#0B0F19]">
       {/* Install sheet */}
       {showInstallCard && (
         <div
@@ -1078,8 +1192,8 @@ export default function LoggingApp() {
             <div className="flex items-center gap-3 pr-8">
               <BrandMark className="h-12 w-12" />
               <div>
-                <p className="text-base font-semibold tracking-tight">Install ZakaScore</p>
-                <p className="text-sm leading-snug text-slate-600">Log sales from your home screen, even offline.</p>
+                <p className="text-base font-semibold tracking-tight">Add ZakaScore to your home screen</p>
+                <p className="text-sm leading-snug text-slate-600">Open it like an app, even offline.</p>
               </div>
             </div>
 
@@ -1102,18 +1216,25 @@ export default function LoggingApp() {
               </div>
             ) : (
               <ol className="mt-5 space-y-3 text-sm text-slate-700">
-                <li className="flex items-center gap-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f7fee7] text-xs font-semibold text-[#4d7c0f]">1</span>
-                  <span>Tap the <Share className="inline h-4 w-4 align-[-3px]" aria-hidden="true" /> <strong>Share</strong> button in Safari</span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f7fee7] text-xs font-semibold text-[#4d7c0f]">2</span>
-                  <span>Scroll and tap <Plus className="inline h-4 w-4 align-[-3px]" aria-hidden="true" /> <strong>Add to Home Screen</strong></span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f7fee7] text-xs font-semibold text-[#4d7c0f]">3</span>
-                  <span>Tap <strong>Add</strong>. Done.</span>
-                </li>
+                {(isIos
+                  ? [
+                      <>Tap the <Share className="inline h-4 w-4 align-[-3px]" aria-hidden="true" /> <strong>Share</strong> button in Safari</>,
+                      <>Scroll and tap <Plus className="inline h-4 w-4 align-[-3px]" aria-hidden="true" /> <strong>Add to Home Screen</strong></>,
+                      <>Tap <strong>Add</strong>. Done.</>,
+                    ]
+                  : [
+                      <>Open your browser menu (<strong>⋮</strong> or <strong>…</strong>)</>,
+                      <>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong></>,
+                      <>Confirm. Done.</>,
+                    ]
+                ).map((step, index) => (
+                  <li key={index} className="flex items-center gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f7fee7] text-xs font-semibold text-[#4d7c0f]">
+                      {index + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
               </ol>
             )}
           </div>
@@ -1131,7 +1252,7 @@ export default function LoggingApp() {
           <button
             type="button"
             aria-label="Close app menu"
-            className="absolute inset-0 bg-black/25 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40"
             onClick={() => setMenuOpen(false)}
           />
           <div
@@ -1139,7 +1260,7 @@ export default function LoggingApp() {
             role="dialog"
             aria-modal="true"
             aria-label="App menu"
-            className="absolute inset-y-0 left-0 w-[85%] max-w-xs overflow-y-auto border-r border-black/[0.07] bg-white shadow-[0_24px_64px_-16px_rgba(16,24,40,0.35)]"
+            className="absolute inset-y-0 left-0 w-[85%] max-w-xs overflow-y-auto overscroll-contain border-r border-black/[0.07] bg-white shadow-[0_24px_64px_-16px_rgba(16,24,40,0.35)]"
           >
             <button
               type="button"
@@ -1155,38 +1276,48 @@ export default function LoggingApp() {
       )}
 
       {/* Chat column */}
-        <div className="relative isolate flex min-w-0 flex-1 flex-col bg-[radial-gradient(ellipse_90%_45%_at_50%_0%,#f7fee7_0%,#ffffff_75%)]">
-          <header className="flex h-14 max-md:h-16 shrink-0 items-center gap-3 border-b border-black/10 bg-white px-3 md:border-black/[0.07] md:bg-white/70 md:backdrop-blur-xl md:backdrop-saturate-150 sm:px-5">
+      <div className="relative isolate flex min-w-0 flex-1 flex-col bg-[radial-gradient(ellipse_90%_45%_at_50%_0%,#f7fee7_0%,#ffffff_75%)]">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-black/10 bg-white px-3 max-md:h-16 sm:px-5 md:border-black/[0.07] md:bg-white/70 md:backdrop-blur-xl md:backdrop-saturate-150">
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
+            aria-label={menuOpen ? "Close app menu" : "Open app menu"}
+            aria-expanded={menuOpen}
+            aria-controls="logging-app-menu"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <Menu className="h-5 w-5" aria-hidden="true" />
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-base font-semibold leading-tight tracking-tight">Log a sale</h1>
+            <p className="truncate text-xs text-slate-500">
+              {selectedStore ? selectedStore.store_name : "No store set up for logging"}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={resetChat}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
+            aria-label="New sale"
+          >
+            <SquarePen className="h-5 w-5" aria-hidden="true" />
+          </button>
+
+          {showInstallButton && (
             <button
               type="button"
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
-              aria-label={menuOpen ? "Close app menu" : "Open app menu"}
-              aria-expanded={menuOpen}
-              aria-controls="logging-app-menu"
-              onClick={() => setMenuOpen((open) => !open)}
+              onClick={openInstall}
+              className="inline-flex h-9 shrink-0 items-center rounded-full bg-[#0B0F19] px-4 text-xs font-semibold text-white transition hover:bg-[#1f2937] active:scale-[0.98]"
             >
-              <Menu className="h-5 w-5" aria-hidden="true" />
+              {installPrompt ? "Install app" : "Add to Home"}
             </button>
-
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-base font-semibold leading-tight tracking-tight">Log a sale</h1>
-              <p className="truncate text-xs text-slate-500">
-                {selectedStore ? selectedStore.store_name : "No PWA-enabled store is available."}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={resetChat}
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-[#0B0F19] transition hover:bg-black/5 md:hidden"
-              aria-label="New sale"
-            >
-              <SquarePen className="h-5 w-5" aria-hidden="true" />
-            </button>
-          </header>
+          )}
+        </header>
 
         {/* Conversation */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
           <div
             className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-[clamp(1rem,5vw,1.25rem)] py-[clamp(1.5rem,8vw,2.5rem)] sm:px-6 md:py-6"
             role="log"
@@ -1196,7 +1327,7 @@ export default function LoggingApp() {
             {showWelcome ? (
               <div className="my-auto flex flex-col items-center py-[clamp(2rem,10vw,3.5rem)] text-center md:py-10">
                 <div className="relative">
-                  <div aria-hidden="true" className="absolute inset-0 -z-10 scale-[2.4] rounded-full bg-[#A3E635]/35 blur-2xl" />
+                  <div aria-hidden="true" className="absolute inset-0 -z-10 scale-[2] rounded-full bg-[#A3E635]/35 blur-2xl" />
                   <BrandMark className="h-16 w-16 rounded-2xl" />
                 </div>
                 <h2 className="mt-7 text-[clamp(1.5rem,7vw,1.875rem)] font-semibold tracking-tight sm:text-3xl">
@@ -1219,7 +1350,7 @@ export default function LoggingApp() {
                       className={`group flex w-full items-center justify-between gap-3 rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-left text-sm font-medium text-[#0B0F19] transition hover:border-[#65a30d]/50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 motion-safe:animate-[rise_0.5s_cubic-bezier(0.22,0.61,0.36,1)_both] ${softShadow}`}
                     >
                       <span>{prompt}</span>
-                      <ArrowUpRight className="h-4 w-4 shrink-0 text-[#4d7c0f] transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" aria-hidden="true" />
+                      <ArrowUpRight className="h-4 w-4 shrink-0 text-[#4d7c0f] transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden="true" />
                     </button>
                   ))}
                 </div>
@@ -1261,7 +1392,7 @@ export default function LoggingApp() {
                 )}
 
                 {needsPayment && draft && (
-                  <div className="flex flex-wrap gap-2 sm:pl-11 max-md:flex-col">
+                  <div className="flex flex-wrap gap-2 max-md:flex-col sm:pl-11">
                     {(["cash", "digital"] as const).map((method) => (
                       <button
                         key={method}
@@ -1322,44 +1453,44 @@ export default function LoggingApp() {
         </div>
 
         {/* Composer */}
-        <div className="shrink-0 bg-gradient-to-t from-white via-white/95 to-transparent px-[clamp(1rem,5vw,1.25rem)] pb-4 pt-3 sm:px-6 max-md:pt-4 max-md:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 bg-gradient-to-t from-white via-white/95 to-transparent px-[clamp(1rem,5vw,1.25rem)] pb-4 pt-3 max-md:pb-[max(1.5rem,env(safe-area-inset-bottom))] max-md:pt-4 sm:px-6">
           <div className="mx-auto w-full max-w-3xl">
             <div className="mb-2 grid gap-2 empty:hidden">
               {!online && (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
-                  You’re offline. Confirmed sales are stored on this device until you reconnect.
-                </p>
+                <Notice tone="warn">
+                  You’re offline. Confirmed sales are saved on this device until you reconnect.
+                </Notice>
               )}
               {role === "viewer" && (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900" role="status">
-                  Your business role allows viewing but not logging sales.
-                </p>
+                <Notice tone="warn">Your role lets you view this business, but not log sales.</Notice>
               )}
-              {stores.length === 0 && !appError && (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900">
-                  No store with an active PWA logging source is available for this business.
-                </p>
+              {stores.length === 0 && !appError && !storesFailed && (
+                <Notice tone="warn">{MSG.noStore}</Notice>
               )}
               {appError && (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900" role="alert">
+                <Notice
+                  tone="error"
+                  onDismiss={() => setAppError("")}
+                  action={storesFailed ? { label: "Try again", onClick: retryStores } : undefined}
+                >
                   {appError}
-                </p>
+                </Notice>
               )}
               {modelError && (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900" role="alert">
+                <Notice tone="warn" onDismiss={() => setModelError("")}>
                   {modelError}
-                </p>
+                </Notice>
               )}
               {syncMessage && (
-                <p className="rounded-xl border border-black/[0.07] bg-white/80 px-3 py-2 text-xs text-slate-600" role="status">
+                <Notice tone="info" onDismiss={() => setSyncMessage("")}>
                   {syncMessage}
-                </p>
+                </Notice>
               )}
             </div>
 
             <form
               onSubmit={submitMessage}
-              className={`flex items-end gap-2 rounded-3xl border border-black/10 bg-white/85 p-2 pl-4 backdrop-blur-xl transition focus-within:border-[#65a30d]/60 focus-within:shadow-[0_0_0_2px_rgba(163,230,53,0.45)] ${deepShadow}`}
+              className={`flex items-end gap-2 rounded-3xl border border-black/10 bg-white/85 p-2 pl-4 transition focus-within:border-[#65a30d]/60 focus-within:shadow-[0_0_0_2px_rgba(163,230,53,0.45)] md:backdrop-blur-xl ${deepShadow}`}
             >
               <label className="sr-only" htmlFor="sale-message">
                 Describe a sale
@@ -1377,8 +1508,8 @@ export default function LoggingApp() {
                   event.target.style.height = "auto";
                   event.target.style.height = `${Math.min(event.target.scrollHeight, 160)}px`;
                 }}
-                placeholder="Describe a sale: what you sold, the total in rand, and cash or digital…"
-                className="max-h-40 min-h-10 flex-1 resize-none bg-transparent py-2.5 text-sm leading-5 text-[#0B0F19] outline-none placeholder:text-slate-400 disabled:cursor-not-allowed max-md:text-base"
+                placeholder="Describe a sale…"
+                className="max-h-40 min-h-10 flex-1 resize-none bg-transparent py-2.5 text-base leading-5 text-[#0B0F19] outline-none placeholder:text-slate-400 disabled:cursor-not-allowed md:text-sm"
               />
               <button
                 type="submit"
@@ -1390,22 +1521,7 @@ export default function LoggingApp() {
               </button>
             </form>
 
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-xs text-slate-500 max-md:flex-col max-md:gap-y-2">
-              {!modelReady && canLog && (
-                <button
-                  type="button"
-                  disabled={modelLoading || !storeId}
-                  onClick={() => void loadAssistant()}
-                  className="font-medium text-[#4d7c0f] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {modelLoading ? "Loading assistant…" : "Load on-device assistant"}
-                </button>
-              )}
-              <span className="max-w-full truncate max-md:whitespace-normal">
-                {modelProgress ||
-                  "Runs on your device. The assistant’s first load downloads a local language model."}
-              </span>
-            </div>
+            <p className="mt-2 text-center text-xs text-slate-500">Processed on your device</p>
           </div>
         </div>
       </div>
