@@ -9,11 +9,14 @@ import {
   ArrowUpRight,
   BarChart3,
   Bell,
+  Clipboard,
   Gauge,
+  Landmark,
   LayoutDashboard,
   Lightbulb,
   Menu,
   Plus,
+  Receipt,
   RefreshCw,
   Settings,
   Share,
@@ -22,6 +25,35 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import {
+  DOC_FEW_SHOT,
+  DOC_SYSTEM_PROMPT,
+  hashFile,
+  hashText,
+  parseDocModelOutput,
+  parseDocument,
+  readImageText,
+  type DocKind,
+  type DocRead,
+} from "@/lib/readDocument";
+import {
+  CHAT,
+  EVIDENCE_LABEL,
+  chipsFor,
+  findSameSale,
+  isGreeting,
+  loadHashes,
+  loadRecent,
+  looksLikeMoneyOut,
+  nextQuestion,
+  questionText,
+  rememberHash,
+  saveRecent,
+  type PaymentMethod,
+  type Question,
+  type RecentSale,
+  type SaleDraft,
+} from "@/lib/saleFlow";
 
 // Put your logo file in frontend/public and set its filename here.
 const LOGO_SRC = "/logo.png";
@@ -33,7 +65,6 @@ const MAX_QUEUED_TRANSACTIONS = 500;
 const QUEUE_PREFIX = "zakascore-pwa-queue:";
 const WORKSPACE_KEY = "zakascore-pwa-workspace";
 
-type PaymentMethod = "cash" | "digital";
 type Role = "owner" | "admin" | "employee" | "viewer";
 type Store = {
   store_id: string;
@@ -50,12 +81,6 @@ type CachedWorkspace = {
   selected_merchant_id: string;
   selected_store_id: string;
   businesses: Business[];
-};
-type SaleDraft = {
-  amount_zar: number | null;
-  payment_method: PaymentMethod | null;
-  offering_name: string | null;
-  quantity: number | null;
 };
 type QueuedTransaction = {
   client_txn_id: string;
@@ -104,6 +129,8 @@ const navBase =
 const selectClass =
   "w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-base text-[#0B0F19] outline-none transition focus:border-[#65a30d]/50 disabled:opacity-60 md:text-sm";
 
+const chipClass = `rounded-full border border-black/[0.08] bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#65a30d]/40 hover:text-[#4d7c0f] disabled:cursor-not-allowed disabled:opacity-50 max-md:w-full max-md:py-3 ${softShadow}`;
+
 const EXAMPLE_PROMPTS = [
   "Sold 2 shirts for R300, cash",
   "R1 500 card payment for a haircut package",
@@ -118,7 +145,18 @@ const APP_NAV: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Notifications", href: "/workspace/dashboard#notifications-panel", icon: Bell },
 ];
 
-const GREETING = "Tell me about a sale and I’ll prepare it for your review.";
+const UPLOAD_OPTIONS: {
+  key: "bank_screenshot" | "receipt" | "paste";
+  title: string;
+  hint: string;
+  Icon: LucideIcon;
+}[] = [
+  { key: "bank_screenshot", title: "Bank screenshot", hint: "Money-in SMS or banking app", Icon: Landmark },
+  { key: "receipt", title: "Receipt", hint: "What a customer paid", Icon: Receipt },
+  { key: "paste", title: "Paste SMS text", hint: "Copy the message instead", Icon: Clipboard },
+];
+
+const GREETING = "Tell me about a sale, or tap + to add a bank screenshot, receipt or SMS.";
 
 /* -------------------------------------------------------------------------- */
 /*  Friendly error messages                                                   */
@@ -143,6 +181,7 @@ const MSG = {
   queueUnreadable: "Some saved sales couldn’t be read. They haven’t been deleted.",
   assistantFailed: "We couldn’t turn on the smart assistant. You can keep logging without it.",
   noStore: "No store is set up for logging yet. Ask the business owner to turn on sale logging.",
+  readFailed: "I couldn’t read that image. Try a clearer photo, or type the sale instead.",
   generic: "Something went wrong. Please try again.",
 } as const;
 
@@ -334,6 +373,65 @@ function parseFollowUpPayment(text: string): PaymentMethod | null {
   return null;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Answers to the chat's follow-up questions                                 */
+/*  Returns the updated draft, or null when the reply doesn't answer the      */
+/*  question (the chat then asks again, politely).                            */
+/* -------------------------------------------------------------------------- */
+
+const SKIP_WORDS = /^\s*(skip|none|no|nothing|n\/a|-)\s*$/i;
+const YES_WORDS = /\b(yes|yeah|yep|yebo|sale|sold|same|customer)\b/i;
+const NO_WORDS = /\b(no|nope|not|different|another|loan|transfer|family|refund)\b/i;
+
+function readYesNo(text: string): boolean | null {
+  if (NO_WORDS.test(text)) return false;
+  if (YES_WORDS.test(text)) return true;
+  return null;
+}
+
+function applyAnswer(question: Question, text: string, draft: SaleDraft): SaleDraft | null {
+  switch (question) {
+    case "amount":
+    case "amount_options": {
+      const amount = parseFollowUpAmount(text);
+      if (amount === null) return null;
+      return {
+        ...draft,
+        amount_zar: amount,
+        amount_options: [],
+        payment_method: draft.payment_method ?? parseFollowUpPayment(text),
+      };
+    }
+    case "payment": {
+      const method = parseFollowUpPayment(text);
+      return method ? { ...draft, payment_method: method } : null;
+    }
+    case "is_sale": {
+      const answer = readYesNo(text);
+      return answer === null ? null : { ...draft, is_sale: answer };
+    }
+    case "match": {
+      const answer = readYesNo(text);
+      return answer === null ? null : { ...draft, match_checked: true, match_confirmed: answer };
+    }
+    case "item": {
+      if (SKIP_WORDS.test(text)) return { ...draft, item_skipped: true };
+      const cleaned = text.trim().replace(/^(i\s+)?sold\s+/i, "");
+      if (!cleaned || cleaned.length > 60 || /\?/.test(cleaned) || /^\d+$/.test(cleaned)) return null;
+      const counted = cleaned.match(/^(\d{1,3})\s+(.+)$/);
+      return counted
+        ? { ...draft, quantity: Number(counted[1]), offering_name: counted[2].toLowerCase() }
+        : { ...draft, offering_name: cleaned.toLowerCase() };
+    }
+    case "quantity": {
+      if (SKIP_WORDS.test(text)) return { ...draft, quantity_skipped: true };
+      const found = text.match(/^\D*(\d{1,4})\D*$/);
+      const quantity = found ? Number(found[1]) : 0;
+      return quantity > 0 ? { ...draft, quantity } : null;
+    }
+  }
+}
+
 /*
   Basic on-device matching. Used on its own when the smart assistant is off or
   fails, and as a cross-check on the assistant's answer. Prefers an amount
@@ -497,10 +595,13 @@ export default function LoggingApp() {
   const engineRef = useRef<LocalModelEngine | null>(null);
   const loadingRef = useRef(false);
   const queueRef = useRef<QueuedTransaction[]>([]);
+  const recentRef = useRef<RecentSale[]>([]);
   const syncInProgress = useRef(false);
   const messageId = useRef(0);
   const endRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadKindRef = useRef<DocKind | null>(null);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [businessId, setBusinessId] = useState("");
   const [storeId, setStoreId] = useState("");
@@ -515,6 +616,7 @@ export default function LoggingApp() {
   const [entry, setEntry] = useState("");
   const [draft, setDraft] = useState<SaleDraft | null>(null);
   const [queue, setQueue] = useState<QueuedTransaction[]>([]);
+  const [recent, setRecent] = useState<RecentSale[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [modelReady, setModelReady] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
@@ -524,6 +626,10 @@ export default function LoggingApp() {
   const [appError, setAppError] = useState("");
   const [syncMessage, setSyncMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [ocrPercent, setOcrPercent] = useState(0);
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
@@ -553,6 +659,15 @@ export default function LoggingApp() {
     }
   }, [storeId]);
 
+  /* The on-device list of recent sales (powers matching, the strip and the sidebar list). */
+  const updateRecent = useCallback((update: (list: RecentSale[]) => RecentSale[]) => {
+    if (!storeId) return;
+    const next = update(recentRef.current).slice(0, 50);
+    recentRef.current = next;
+    setRecent(next);
+    saveRecent(storeId, next);
+  }, [storeId]);
+
   const syncQueue = useCallback(async () => {
     if (!storeId || !navigator.onLine || syncInProgress.current || queueRef.current.length === 0) return;
     syncInProgress.current = true;
@@ -576,7 +691,11 @@ export default function LoggingApp() {
           setSyncMessage(response.status >= 500 ? MSG.server : MSG.syncStuck);
           return;
         }
+        const finishedId = current.client_txn_id;
         if (!replaceQueue(queueRef.current.slice(1))) return;
+        updateRecent((list) =>
+          list.map((sale) => (sale.client_txn_id === finishedId ? { ...sale, status: "recorded" } : sale)),
+        );
       }
       setSyncMessage("All saved sales are synced.");
     } catch (error) {
@@ -586,7 +705,7 @@ export default function LoggingApp() {
       syncInProgress.current = false;
       setSyncing(false);
     }
-  }, [replaceQueue, storeId]);
+  }, [replaceQueue, storeId, updateRecent]);
 
   /* Loads the on-device model. `auto` is true when it restarts itself on a later visit. */
   const loadAssistant = useCallback(async (auto = false) => {
@@ -790,6 +909,21 @@ export default function LoggingApp() {
     };
   }, [storeId, syncQueue]);
 
+  // Load this store's recent sales from the device.
+  useEffect(() => {
+    if (!storeId) return;
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled) return;
+      const saved = loadRecent(storeId);
+      recentRef.current = saved;
+      setRecent(saved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [storeId]);
+
   // Keep the newest message in view.
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -812,26 +946,68 @@ export default function LoggingApp() {
     setReloadKey((key) => key + 1);
   }
 
-  function requestMissingDetails(sale: SaleDraft) {
-    setDraft(sale);
-    if (sale.amount_zar === null && sale.payment_method === null) {
-      addMessage("assistant", "What was the total, and was it paid in cash or digitally?");
-    } else if (sale.amount_zar === null) {
-      addMessage("assistant", "What was the total amount for that sale?");
-    } else if (sale.payment_method === null) {
-      addMessage("assistant", "Was that paid in cash or digitally?");
-    } else {
-      addMessage(
-        "assistant",
-        `I understood ${sale.quantity ? `${sale.quantity} ${sale.offering_name} for ` : ""}${formatAmount(sale.amount_zar)}, paid ${sale.payment_method}. Is that right?`,
-      );
-    }
+  /* ----------------------- The conversation flow ------------------------- */
+
+  // Link a new entry to a sale that was already recorded, so it isn't counted twice.
+  function linkToExisting(sale: SaleDraft, target: RecentSale) {
+    updateRecent((list) =>
+      list.map((item) => (item.client_txn_id === target.client_txn_id ? { ...item, corroborated: true } : item)),
+    );
+    if (sale.evidence_hash && storeId) rememberHash(storeId, sale.evidence_hash);
+    setDraft(null);
+    addMessage("assistant", CHAT.linked);
   }
 
-  function choosePayment(method: PaymentMethod) {
+  /*
+    Every reply and every upload ends up here. It checks for a matching sale,
+    stops if the money wasn't from a sale, asks the next missing question,
+    or (when nothing is missing) asks the user to review.
+  */
+  function advance(input: SaleDraft) {
+    let sale = input;
+    if (sale.amount_zar !== null && sale.payment_method !== null && sale.match === undefined) {
+      const found = findSameSale(sale, recentRef.current);
+      sale = { ...sale, match: found, match_checked: found === null };
+    }
+
+    if (sale.is_sale === false) {
+      setDraft(null);
+      addMessage("assistant", CHAT.notSale);
+      return;
+    }
+    if (sale.match && sale.match_confirmed) {
+      linkToExisting(sale, sale.match);
+      return;
+    }
+
+    setDraft(sale);
+    const question = nextQuestion(sale);
+    if (question) {
+      addMessage("assistant", questionText(question, sale, formatAmount));
+      return;
+    }
+    const itemText =
+      sale.offering_name && sale.offering_name !== "general sale"
+        ? `${sale.quantity ? `${sale.quantity} ` : ""}${sale.offering_name} for `
+        : "";
+    addMessage(
+      "assistant",
+      `I understood ${itemText}${formatAmount(sale.amount_zar ?? 0)}, paid ${sale.payment_method}. Is that right?`,
+    );
+  }
+
+  // A tapped chip behaves exactly like the user typing that answer.
+  function answerWith(label: string, text: string) {
     if (!draft || busy) return;
-    addMessage("you", method === "cash" ? "Cash" : "Digital");
-    requestMissingDetails({ ...draft, payment_method: method });
+    const question = nextQuestion(draft);
+    if (!question) return;
+    addMessage("you", label);
+    const updated = applyAnswer(question, text, draft);
+    if (!updated) {
+      addMessage("assistant", `${CHAT.notUnderstood} ${questionText(question, draft, formatAmount)}`);
+      return;
+    }
+    advance(updated);
   }
 
   function resetChat() {
@@ -841,6 +1017,9 @@ export default function LoggingApp() {
     setEntry("");
     setAppError("");
     setMenuOpen(false);
+    setPlusOpen(false);
+    setPasteOpen(false);
+    setPasteText("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   }
 
@@ -871,6 +1050,117 @@ export default function LoggingApp() {
     }
   }
 
+  // Small-model fallback for uploads. Only used when the rule-based reader finds no amount.
+  async function readDocWithAssistant(text: string, kind: DocKind): Promise<Partial<DocRead> | null> {
+    const engine = engineRef.current;
+    if (!engine) return null;
+    try {
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Assistant timed out")), ASSISTANT_TIMEOUT_MS);
+      });
+      const result = await Promise.race([
+        engine.chat.completions.create({
+          messages: [
+            { role: "system", content: DOC_SYSTEM_PROMPT },
+            ...DOC_FEW_SHOT,
+            { role: "user", content: `${kind}:\n${text.slice(0, 1200)}` },
+          ],
+          temperature: 0,
+          max_tokens: 140,
+        }),
+        timeout,
+      ]);
+      return parseDocModelOutput(result.choices[0]?.message.content ?? null);
+    } catch (error) {
+      console.error("Assistant failed on an upload", error);
+      return null;
+    }
+  }
+
+  // Shared by photo uploads and pasted SMS text: from "text we can read" to the next question.
+  async function processDocument(kind: DocKind, text: string, hash: string, label: string) {
+    let read: DocRead = parseDocument(text, kind);
+
+    if (read.amount_zar === null && read.amount_options.length === 0) {
+      const assisted = await readDocWithAssistant(text, kind);
+      const guess = assisted?.amount_zar ?? null;
+      // Only trust the model's number if it really appears in the text.
+      if (guess !== null && text.replace(/[\s,]/g, "").includes(String(Math.trunc(guess)))) {
+        read = { ...read, amount_zar: guess, direction: read.direction ?? assisted?.direction ?? null };
+      }
+    }
+
+    if (read.direction === "out") {
+      addMessage("assistant", CHAT.moneyOut);
+      return;
+    }
+    if (read.amount_zar === null && read.amount_options.length === 0) {
+      addMessage("assistant", `I couldn’t find an amount in that ${label}. Try a clearer photo, or type the sale instead.`);
+      return;
+    }
+    if (kind === "bank_screenshot" && read.direction === null) {
+      addMessage("assistant", "I couldn’t tell if that was money coming in. Only confirm it if you received it.");
+    }
+    advance({
+      amount_zar: read.amount_zar,
+      amount_options: read.amount_options,
+      payment_method: kind === "bank_screenshot" ? "digital" : read.payment_method,
+      offering_name: null,
+      quantity: null,
+      evidence: kind,
+      transaction_date: read.transaction_date,
+      evidence_hash: hash,
+    });
+  }
+
+  async function handleUpload(file: File, kind: DocKind) {
+    if (busy || !storeId || !canLog) return;
+    const label = kind === "bank_screenshot" ? "bank screenshot" : "receipt";
+    setAppError("");
+    setDraft(null);
+    addMessage("you", `Uploaded a ${label}`);
+    setBusy(true);
+    try {
+      const hash = await hashFile(file);
+      if (loadHashes(storeId).includes(hash)) {
+        addMessage("assistant", CHAT.duplicate);
+        return;
+      }
+      const text = await readImageText(file, setOcrPercent);
+      await processDocument(kind, text, hash, label);
+    } catch (error) {
+      console.error("Could not read the upload", error);
+      addMessage("assistant", MSG.readFailed);
+    } finally {
+      setBusy(false);
+      setOcrPercent(0);
+    }
+  }
+
+  async function handlePaste() {
+    const text = pasteText.trim();
+    if (!text || busy || !storeId || !canLog) return;
+    setPasteOpen(false);
+    setPasteText("");
+    setAppError("");
+    setDraft(null);
+    addMessage("you", "Pasted an SMS");
+    setBusy(true);
+    try {
+      const hash = await hashText(text);
+      if (loadHashes(storeId).includes(hash)) {
+        addMessage("assistant", CHAT.duplicate);
+        return;
+      }
+      await processDocument("bank_screenshot", text, hash, "SMS");
+    } catch (error) {
+      console.error("Could not read the pasted SMS", error);
+      addMessage("assistant", MSG.generic);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitMessage(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     const text = entry.trim();
@@ -880,13 +1170,38 @@ export default function LoggingApp() {
     setAppError("");
     addMessage("you", text);
 
-    // Follow-up to fill in a missing amount or payment type
-    if (draft && (draft.amount_zar === null || draft.payment_method === null)) {
-      requestMissingDetails({
-        ...draft,
-        amount_zar: draft.amount_zar ?? parseFollowUpAmount(text),
-        payment_method: draft.payment_method ?? parseFollowUpPayment(text),
-      });
+    // A reply to a question the assistant just asked. A message with a new R amount in it
+    // is treated as a new sale instead, so people can simply start over.
+    const pending = draft ? nextQuestion(draft) : null;
+    const startsNewSale =
+      /(?:\br|zar)\s?\d/i.test(text) && pending !== "amount" && pending !== "amount_options";
+    if (draft && pending && !startsNewSale) {
+      const updated = applyAnswer(pending, text, draft);
+      if (!updated) {
+        addMessage("assistant", `${CHAT.notUnderstood} ${questionText(pending, draft, formatAmount)}`);
+        return;
+      }
+      advance(updated);
+      return;
+    }
+
+    // The review card is showing: a plain "yes" confirms it and a plain "no" cancels it.
+    if (draft && !pending) {
+      if (/^\s*(yes|yeah|yep|yebo|correct|right|ok|okay|confirm)\b/i.test(text)) {
+        void confirmSale();
+        return;
+      }
+      if (/^\s*(no|nope|wrong|cancel)\b/i.test(text)) {
+        setDraft(null);
+        addMessage("assistant", "No problem. Tell me the correct details and I’ll try again.");
+        return;
+      }
+    }
+
+    // This chat only records money coming in from sales.
+    if (looksLikeMoneyOut(text)) {
+      setDraft(null);
+      addMessage("assistant", CHAT.moneyOut);
       return;
     }
 
@@ -902,30 +1217,54 @@ export default function LoggingApp() {
     }
 
     const sale = reconcileSale(modelSale, basic, text);
-    if (!sale) {
+    if (!sale || (sale.amount_zar === null && !sale.offering_name)) {
       setDraft(null);
-      addMessage("assistant", "I couldn’t find a sale total in that. Try something like “2 shirts, R300, cash”.");
+      addMessage("assistant", isGreeting(text) ? CHAT.greeting : /\d/.test(text) ? CHAT.noAmount : CHAT.scope);
       return;
     }
-    requestMissingDetails(sale);
+    advance({ ...sale, evidence: "typed" });
   }
 
   async function confirmSale() {
     if (!draft || draft.amount_zar === null || !draft.payment_method || !storeId || busy || !canLog) return;
+    if (nextQuestion(draft) !== null) return;
     const store = stores.find((item) => item.store_id === storeId);
     if (!store) {
       setAppError(MSG.noStore);
       return;
     }
+    const current = draft;
+    const amount = draft.amount_zar;
+    const method = draft.payment_method;
+    const now = new Date().toISOString();
     const transaction: QueuedTransaction = {
       store_id: storeId,
       client_txn_id: crypto.randomUUID(),
-      amount_zar: draft.amount_zar.toFixed(2),
-      payment_method: draft.payment_method,
-      transaction_date: new Date().toISOString(),
-      ...(draft.offering_name ? { offering_name: draft.offering_name } : {}),
-      ...(draft.quantity ? { quantity: draft.quantity } : {}),
+      amount_zar: amount.toFixed(2),
+      payment_method: method,
+      transaction_date: current.transaction_date ?? now,
+      ...(current.offering_name ? { offering_name: current.offering_name } : {}),
+      ...(current.quantity ? { quantity: current.quantity } : {}),
     };
+
+    // Remember the sale on this device (for matching, the strip and the recent list).
+    const record = (status: RecentSale["status"]) => {
+      updateRecent((list) => [
+        {
+          client_txn_id: transaction.client_txn_id,
+          amount_zar: amount,
+          payment_method: method,
+          offering_name: current.offering_name,
+          evidence: current.evidence ?? "typed",
+          corroborated: false,
+          status,
+          created_at: now,
+        },
+        ...list,
+      ]);
+      if (current.evidence_hash) rememberHash(storeId, current.evidence_hash);
+    };
+
     setBusy(true);
     setAppError("");
     try {
@@ -947,6 +1286,7 @@ export default function LoggingApp() {
           setAppError(messageForStatus(response.status, "save"));
           return;
         }
+        record("recorded");
         setDraft(null);
         addMessage("assistant", "Sale recorded. You can add another whenever you’re ready.");
         setSyncMessage("");
@@ -956,6 +1296,7 @@ export default function LoggingApp() {
           return;
         }
         if (!replaceQueue([...queueRef.current, transaction])) return;
+        record("waiting");
         setDraft(null);
         addMessage("assistant", "Saved on this device. I’ll sync this sale when you’re back online.");
         setSyncMessage(MSG.syncWaiting);
@@ -967,12 +1308,21 @@ export default function LoggingApp() {
         return;
       }
       if (!replaceQueue([...queueRef.current, transaction])) return;
+      record("waiting");
       setDraft(null);
       addMessage("assistant", "I couldn’t connect, so I saved this sale on your phone. It will sync automatically.");
       setSyncMessage(MSG.syncWaiting);
     } finally {
       setBusy(false);
     }
+  }
+
+  // Only sales still waiting to sync can be removed. Recorded ones are already on the server.
+  function removeWaiting(id: string) {
+    if (syncInProgress.current || busy) return;
+    if (!replaceQueue(queueRef.current.filter((item) => item.client_txn_id !== id))) return;
+    updateRecent((list) => list.filter((sale) => sale.client_txn_id !== id));
+    setSyncMessage("");
   }
 
   function dismissInstall() {
@@ -1015,6 +1365,8 @@ export default function LoggingApp() {
     });
     setQueue([]);
     queueRef.current = [];
+    setRecent([]);
+    recentRef.current = [];
     setDraft(null);
   }
 
@@ -1034,17 +1386,37 @@ export default function LoggingApp() {
     }
   }
 
+  function chooseUpload(key: (typeof UPLOAD_OPTIONS)[number]["key"]) {
+    setPlusOpen(false);
+    if (key === "paste") {
+      setPasteOpen(true);
+      return;
+    }
+    uploadKindRef.current = key;
+    fileInputRef.current?.click();
+  }
+
   const selectedBusiness = businesses.find((business) => business.merchant_id === businessId);
   const stores = (selectedBusiness?.stores ?? []).filter((store) => store.pwa_logging_enabled);
   const role = selectedBusiness?.role ?? null;
   const canLog = role !== null && role !== "viewer";
   const selectedStore = stores.find((store) => store.store_id === storeId);
-  const draftComplete = !!draft && draft.amount_zar !== null && !!draft.payment_method;
-  const needsPayment = !!draft && draft.amount_zar !== null && draft.payment_method === null;
+  const activeQuestion = draft ? nextQuestion(draft) : null;
+  const chips = draft && activeQuestion ? chipsFor(activeQuestion, draft, formatAmount) : [];
+  const draftComplete = !!draft && activeQuestion === null && draft.amount_zar !== null && !!draft.payment_method;
   const showWelcome = messages.length <= 1 && !draft;
   const composerDisabled = busy || !storeId || !canLog;
   const showInstallButton = !standalone;
   const showInstallCard = installSheetOpen && showInstallButton;
+
+  // Today's sales on this device, and how much of that money is backed by a bank message or receipt.
+  const todayKey = new Date().toDateString();
+  const todaySales = recent.filter((sale) => new Date(sale.created_at).toDateString() === todayKey);
+  const todayTotal = todaySales.reduce((sum, sale) => sum + sale.amount_zar, 0);
+  const backedTotal = todaySales
+    .filter((sale) => sale.evidence !== "typed" || sale.corroborated)
+    .reduce((sum, sale) => sum + sale.amount_zar, 0);
+  const backedPercent = todayTotal > 0 ? Math.round((backedTotal / todayTotal) * 100) : 0;
 
   if (loadingStores) {
     return (
@@ -1201,6 +1573,46 @@ export default function LoggingApp() {
         )}
       </div>
 
+      {recent.length > 0 && (
+        <div className="grid gap-2 border-t border-black/[0.07] pt-4">
+          <span className="text-xs font-medium text-slate-500">Recent sales</span>
+          <ul className="grid gap-1.5">
+            {recent.slice(0, 5).map((sale) => (
+              <li
+                key={sale.client_txn_id}
+                className="flex items-center justify-between gap-2 rounded-xl border border-black/[0.07] bg-white/70 px-3 py-2 text-xs"
+              >
+                <span className="min-w-0">
+                  <strong className="block text-sm font-medium tabular-nums text-[#0B0F19]">
+                    {formatAmount(sale.amount_zar)}
+                  </strong>
+                  <span className="block truncate text-slate-500">
+                    {sale.payment_method}
+                    {sale.offering_name ? ` · ${sale.offering_name}` : ""} · {EVIDENCE_LABEL[sale.evidence]}
+                    {sale.corroborated ? " + linked" : ""}
+                  </span>
+                </span>
+                {sale.status === "waiting" ? (
+                  <button
+                    type="button"
+                    onClick={() => removeWaiting(sale.client_txn_id)}
+                    disabled={syncing || busy}
+                    className="shrink-0 font-medium text-[#4d7c0f] underline underline-offset-2 disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                ) : (
+                  <span className="shrink-0 text-slate-400">Recorded</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            Sales that are already recorded can’t be removed from here.
+          </p>
+        </div>
+      )}
+
       <div className="mt-auto grid gap-3 text-xs text-slate-600">
         <div className="flex items-center justify-between gap-2 rounded-xl border border-black/[0.07] bg-white/70 px-3 py-2">
           <span>{queue.length} waiting to sync</span>
@@ -1335,7 +1747,7 @@ export default function LoggingApp() {
       )}
 
       {/* Desktop sidebar */}
-      <aside className="hidden w-72 shrink-0 border-r border-black/[0.07] bg-white md:block">
+      <aside className="hidden w-72 shrink-0 overflow-y-auto border-r border-black/[0.07] bg-white md:block">
         {sidebar}
       </aside>
 
@@ -1409,6 +1821,28 @@ export default function LoggingApp() {
           )}
         </header>
 
+        {/* Today strip: how much of today's money is backed by a bank message or receipt */}
+        {todaySales.length > 0 && (
+          <div
+            className="shrink-0 border-b border-black/[0.07] bg-white/70 px-4 py-2 sm:px-6"
+            title="Share of today’s sales backed by a bank message or receipt"
+          >
+            <div className="mx-auto flex w-full max-w-3xl items-center gap-3 text-xs text-slate-600">
+              <span className="shrink-0">
+                Today on this device{" "}
+                <strong className="font-semibold tabular-nums text-[#0B0F19]">{formatAmount(todayTotal)}</strong>
+              </span>
+              <span className="h-1.5 min-w-8 flex-1 overflow-hidden rounded-full bg-black/[0.06]" aria-hidden="true">
+                <span
+                  className="block h-full rounded-full bg-[#A3E635] transition-[width] duration-500"
+                  style={{ width: `${backedPercent}%` }}
+                />
+              </span>
+              <span className="shrink-0 font-medium text-[#4d7c0f]">{backedPercent}% backed</span>
+            </div>
+          </div>
+        )}
+
         {/* Conversation */}
         <div className="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain">
           <div
@@ -1480,21 +1914,24 @@ export default function LoggingApp() {
                 {busy && (
                   <div className="flex items-start gap-3">
                     <BrandMark className="mt-0.5 h-8 w-8 text-sm" />
-                    <p className="animate-pulse pt-1 text-sm text-slate-500">Preparing your sale…</p>
+                    <p className="animate-pulse pt-1 text-sm text-slate-500">
+                      {ocrPercent > 0 ? `Reading your upload… ${ocrPercent}%` : "Preparing your sale…"}
+                    </p>
                   </div>
                 )}
 
-                {needsPayment && draft && (
+                {/* Tap-to-answer options for whatever the assistant just asked */}
+                {!busy && draft && chips.length > 0 && (
                   <div className="flex flex-wrap gap-2 max-md:flex-col sm:pl-11">
-                    {(["cash", "digital"] as const).map((method) => (
+                    {chips.map((chip) => (
                       <button
-                        key={method}
+                        key={chip.label}
                         type="button"
                         disabled={busy}
-                        onClick={() => choosePayment(method)}
-                        className={`rounded-full border border-black/[0.08] bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-[#65a30d]/40 hover:text-[#4d7c0f] max-md:w-full max-md:py-3 ${softShadow}`}
+                        onClick={() => answerWith(chip.label, chip.text)}
+                        className={chipClass}
                       >
-                        {method === "cash" ? "Cash" : "Digital"}
+                        {chip.label}
                       </button>
                     ))}
                   </div>
@@ -1515,6 +1952,11 @@ export default function LoggingApp() {
                         {draft.offering_name ? `${draft.offering_name} · ` : ""}
                         Paid by {draft.payment_method}
                       </p>
+                      {draft.evidence && draft.evidence !== "typed" && (
+                        <p className="mt-1 text-xs text-[#4d7c0f]">
+                          Backed by a {EVIDENCE_LABEL[draft.evidence]}
+                        </p>
+                      )}
                       <p className="mt-3 text-xs text-slate-500">
                         Not right? Send a new message with the correct details.
                       </p>
@@ -1549,36 +1991,74 @@ export default function LoggingApp() {
         <div className="shrink-0 bg-gradient-to-t from-white via-white/95 to-transparent px-[clamp(1rem,5vw,1.25rem)] pb-4 pt-3 max-md:pb-[max(1.5rem,env(safe-area-inset-bottom))] max-md:pt-4 sm:px-6">
           <div className="mx-auto w-full max-w-3xl">
             {canLog && assistantSupported === true && (
-  modelReady ? (
-    <p className="mb-2 flex items-center justify-center gap-1.5 text-xs font-medium text-[#4d7c0f]">
-      <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-      Smart assistant on
-    </p>
-  ) : (
-    <div className="mb-2 flex justify-center">
-      <button
-        type="button"
-        disabled={modelLoading || !storeId || !online}
-        onClick={() => void loadAssistant()}
-        className={`relative inline-flex h-9 items-center gap-2 overflow-hidden rounded-full border border-[#65a30d]/30 bg-[#f7fee7] px-4 text-xs font-semibold text-[#4d7c0f] transition hover:border-[#65a30d]/60 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 ${softShadow}`}
-      >
-        <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-        {modelLoading
-          ? `Downloading… ${modelPercent}%`
-          : online
-            ? "Turn on smart assistant"
-            : "Connect to turn on smart assistant"}
-        {modelLoading && (
-          <span
-            aria-hidden="true"
-            className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-[#65a30d]"
-            style={{ transform: `scaleX(${modelPercent / 100})` }}
-          />
-        )}
-      </button>
-    </div>
-  )
-)}
+              modelReady ? (
+                <p className="mb-2 flex items-center justify-center gap-1.5 text-xs font-medium text-[#4d7c0f]">
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  Smart assistant on
+                </p>
+              ) : (
+                <div className="mb-2 flex justify-center">
+                  <button
+                    type="button"
+                    disabled={modelLoading || !storeId || !online}
+                    onClick={() => void loadAssistant()}
+                    className={`relative inline-flex h-9 items-center gap-2 overflow-hidden rounded-full border border-[#65a30d]/30 bg-[#f7fee7] px-4 text-xs font-semibold text-[#4d7c0f] transition hover:border-[#65a30d]/60 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 ${softShadow}`}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    {modelLoading
+                      ? `Downloading… ${modelPercent}%`
+                      : online
+                        ? "Turn on smart assistant"
+                        : "Connect to turn on smart assistant"}
+                    {modelLoading && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-[#65a30d]"
+                        style={{ transform: `scaleX(${modelPercent / 100})` }}
+                      />
+                    )}
+                  </button>
+                </div>
+              )
+            )}
+
+            {/* Paste an SMS instead of uploading a screenshot */}
+            {pasteOpen && (
+              <div className={`mb-2 rounded-2xl border border-black/10 bg-white p-3 ${softShadow}`}>
+                <label htmlFor="paste-sms" className="text-xs font-medium text-slate-600">
+                  Paste the money-in SMS
+                </label>
+                <textarea
+                  id="paste-sms"
+                  rows={3}
+                  maxLength={600}
+                  value={pasteText}
+                  onChange={(event) => setPasteText(event.target.value)}
+                  className="mt-1.5 w-full resize-none rounded-xl border border-black/10 bg-white px-3 py-2 text-base text-[#0B0F19] outline-none transition focus:border-[#65a30d]/50 md:text-sm"
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPasteOpen(false);
+                      setPasteText("");
+                    }}
+                    className="min-h-10 rounded-xl border border-black/10 bg-white px-4 text-sm font-medium text-[#0B0F19]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || !pasteText.trim()}
+                    onClick={() => void handlePaste()}
+                    className={`${limeBtn} min-h-10 rounded-xl px-5 text-sm font-medium`}
+                  >
+                    Read it
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="mb-2 grid gap-2 empty:hidden">
               {!online && (
                 <Notice tone="warn">
@@ -1614,8 +2094,66 @@ export default function LoggingApp() {
 
             <form
               onSubmit={submitMessage}
-              className={`flex items-end gap-2 rounded-3xl border border-black/10 bg-white/85 p-2 pl-4 transition focus-within:border-[#65a30d]/60 focus-within:shadow-[0_0_0_2px_rgba(163,230,53,0.45)] md:backdrop-blur-xl ${deepShadow}`}
+              className={`flex items-end gap-2 rounded-3xl border border-black/10 bg-white/85 p-2 pl-2 transition focus-within:border-[#65a30d]/60 focus-within:shadow-[0_0_0_2px_rgba(163,230,53,0.45)] md:backdrop-blur-xl ${deepShadow}`}
             >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file && uploadKindRef.current) void handleUpload(file, uploadKindRef.current);
+                }}
+              />
+
+              <div className="relative">
+                <button
+                  type="button"
+                  aria-label="Add a bank screenshot, receipt or SMS"
+                  aria-expanded={plusOpen}
+                  disabled={composerDisabled}
+                  onClick={() => setPlusOpen((open) => !open)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-slate-700 transition hover:border-[#65a30d]/50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Plus
+                    className={`h-5 w-5 transition-transform ${plusOpen ? "rotate-45" : ""}`}
+                    aria-hidden="true"
+                  />
+                </button>
+                {plusOpen && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Close menu"
+                      className="fixed inset-0 z-10 cursor-default"
+                      onClick={() => setPlusOpen(false)}
+                    />
+                    <div
+                      role="menu"
+                      className={`absolute bottom-full left-0 z-20 mb-2 w-64 rounded-2xl border border-black/10 bg-white p-1.5 ${deepShadow}`}
+                    >
+                      {UPLOAD_OPTIONS.map(({ key, title, hint, Icon }) => (
+                        <button
+                          key={key}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => chooseUpload(key)}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-[#f7fee7] max-md:py-3"
+                        >
+                          <Icon className="h-4 w-4 shrink-0 text-[#4d7c0f]" aria-hidden="true" />
+                          <span className="grid">
+                            <span className="text-sm font-medium text-[#0B0F19]">{title}</span>
+                            <span className="text-xs text-slate-500">{hint}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
               <label className="sr-only" htmlFor="sale-message">
                 Describe a sale
               </label>
@@ -1633,7 +2171,7 @@ export default function LoggingApp() {
                   event.target.style.height = `${Math.min(event.target.scrollHeight, 160)}px`;
                 }}
                 placeholder="Describe a sale…"
-                className="max-h-40 min-h-10 flex-1 resize-none bg-transparent py-2.5 text-base leading-5 text-[#0B0F19] outline-none placeholder:text-slate-400 disabled:cursor-not-allowed md:text-sm"
+                className="max-h-40 min-h-10 flex-1 resize-none bg-transparent py-2.5 pl-1 text-base leading-5 text-[#0B0F19] outline-none placeholder:text-slate-400 disabled:cursor-not-allowed md:text-sm"
               />
               <button
                 type="submit"
