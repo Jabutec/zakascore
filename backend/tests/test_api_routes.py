@@ -407,7 +407,7 @@ def test_credit_score_is_still_building_for_a_new_merchant(client, conn):
     details = client.get("/api/credit-score/details", headers=headers).json()
     assert details["status"] == "building"
     assert details["credit_score"] is None
-    assert details["weeks_required"] == 12 and details["weeks_of_history"] == 0
+    assert details["weeks_required"] == 4 and details["weeks_of_history"] == 0
 
 
 def test_free_tier_cannot_access_credit_score_details(client, conn):
