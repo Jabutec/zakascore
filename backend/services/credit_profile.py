@@ -9,6 +9,7 @@ the full credit profile (Feature.CREDIT_PREVIEW) and passes `premium`; merchants
 tier never receive the full fields, so hiding them in the page is not what protects them.
 """
 import statistics
+import os
 from datetime import date, datetime, timedelta
 
 try:  # works whether this file sits in a package or next to credit_scoring.py
@@ -277,7 +278,7 @@ def build_building_profile(
 def apply_plan(profile: dict, premium: bool) -> dict:
     """Insights tier: the score, its band, one tip and the week in progress. Everything else is withheld."""
     profile = dict(profile)
-    profile["plan"] = "full" if premium else "insights"
+    profile["plan"] = "full" if premium else "free"
     if premium:
         profile["locked"] = []
         return profile
@@ -324,3 +325,15 @@ def get_credit_profile(merchant_id, conn, as_of=None, premium: bool = False) -> 
             previous_score = None
 
     return apply_plan(build_scored_profile(assessment, this_week, as_of_date, previous_score), premium)
+
+def is_premium_merchant(merchant_id) -> bool:
+    """Return True when the merchant ID is in the premium allowlist."""
+    raw_ids = os.getenv("PREMIUM_MERCHANT_IDS", "")
+
+    premium_ids = {
+        merchant_id.strip()
+        for merchant_id in raw_ids.split(",")
+        if merchant_id.strip()
+    }
+
+    return str(merchant_id).strip() in premium_ids
