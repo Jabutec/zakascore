@@ -1,0 +1,272 @@
+/*
+  Credit profile page: only the pieces the dashboard stylesheet doesn't already have.
+  The shell, cards, score gauge, headings and tables all reuse the dashboard's classes,
+  so the two pages stay visually in step. Every class here starts with "cp-".
+  Colours match the logging app: ink #0B0F19, lime #A3E635, green #4d7c0f.
+*/
+
+.cp-lead {
+  margin: 0.4rem 0 0;
+  max-width: 60ch;
+  color: #475569;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.cp-top {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.cp-top > .cp-building {
+  grid-column: 1 / -1;
+}
+
+.cp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.cp-wide {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .cp-top,
+  .cp-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Summary next to the gauge */
+.cp-summary h2 {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.cp-summary p {
+  margin: 0 0 0.75rem;
+  color: #334155;
+  line-height: 1.55;
+}
+
+.cp-facts {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.cp-facts div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.cp-facts dt,
+.cp-stats dt {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.cp-facts dd,
+.cp-stats dd {
+  margin: 0;
+  color: #0b0f19;
+  font-weight: 600;
+}
+
+.cp-disclaimer,
+.cp-note {
+  margin: 0.75rem 0 0;
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* "Building" progress: one segment per required week */
+.cp-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.cp-steps span {
+  height: 0.6rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.cp-steps span.done {
+  background: #a3e635;
+}
+
+.cp-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.5rem;
+  text-decoration: none;
+}
+
+/* Number tiles */
+.cp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 0;
+}
+
+.cp-stats div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.cp-stats dd {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tips */
+.cp-tips {
+  display: grid;
+  gap: 1rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cp-tips li {
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 0.9rem;
+  background: #f7fee7;
+}
+
+.cp-tips p {
+  margin: 0.35rem 0 0;
+  color: #1e293b;
+  line-height: 1.5;
+}
+
+.cp-tip-tag {
+  color: #4d7c0f;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Factors */
+.cp-factors {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 1.5rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 700px) {
+  .cp-factors {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.cp-factor p {
+  margin: 0.25rem 0 0.6rem;
+  color: #475569;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.cp-factor small {
+  display: block;
+  margin-top: 0.4rem;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.cp-factor-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.cp-bar {
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.cp-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #bef264, #a3e635);
+}
+
+.cp-status,
+.cp-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cp-status.cp-strong,
+.cp-chip.cp-dir-up {
+  background: #ecfccb;
+  color: #3f6212;
+}
+
+.cp-status.cp-focus,
+.cp-chip.cp-dir-down {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Forecast */
+.cp-range {
+  margin: 0.75rem 0 0.25rem;
+  color: #0b0f19;
+  font-size: 1.5rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Locked sections: nothing is hidden behind them, the data isn't sent at all */
+.cp-locked {
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+  height: 100%;
+  border-style: dashed;
+}
+
+.cp-locked h2 {
+  margin: 0;
+}
+
+.cp-locked p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.cp-lock-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.7rem;
+  background: #f7fee7;
+  color: #4d7c0f;
+}

@@ -4,8 +4,10 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-import credit_scoring as cs
-import credit_profile as cp
+
+from services.credit_scoring import credit_scoring as cs
+
+from services.credit_profile import credit_profile as cp
 
 
 class FakeCursor:

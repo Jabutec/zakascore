@@ -389,7 +389,7 @@ export default function DashboardView({
           {[
             ["overview", "Dashboard", "#overview"],
             ["reports", "Reports", "#revenue-chart"],
-            ["scores", "Credit", "#score-overview"],
+            ["scores", "Credit", "/workspace/credit"],
             ["insights", "Insights", "#insights"],
             ["bell", "Notifications", "#notifications-panel"],
           ].map(([icon, label, href], index) => (

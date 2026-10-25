@@ -4,10 +4,10 @@ The score itself is unchanged. This module adds the parts around it: a band, the
 factors, tips ranked by how many points they could add, a plain range for next week's
 takings, a "this week so far" view that reacts live, and the free / premium split.
 
-The free / premium split happens HERE, on the server. Free users never receive the premium
-fields, so hiding them in the page is not what protects them.
+The plan split happens HERE, on the server. The route decides whether the merchant's tier includes
+the full credit profile (Feature.CREDIT_PREVIEW) and passes `premium`; merchants on the Insights
+tier never receive the full fields, so hiding them in the page is not what protects them.
 """
-import os
 import statistics
 from datetime import date, datetime, timedelta
 
@@ -59,23 +59,6 @@ DISCLAIMER = (
 )
 
 FREE_LOCKED = ["factors", "metrics", "forecast", "score_change", "more_tips", "report"]
-
-
-# ---------------------------------------------------------------------------
-# Plan
-# ---------------------------------------------------------------------------
-def premium_merchant_ids() -> set[str]:
-    """Temporary: merchants on the premium plan, from PREMIUM_MERCHANT_IDS (comma separated).
-
-    Replace with a plan column on merchants when billing exists. Until then this keeps the
-    gating real without a schema change.
-    """
-    raw = os.environ.get("PREMIUM_MERCHANT_IDS", "")
-    return {item.strip() for item in raw.split(",") if item.strip()}
-
-
-def is_premium_merchant(merchant_id) -> bool:
-    return str(merchant_id) in premium_merchant_ids()
 
 
 # ---------------------------------------------------------------------------
@@ -292,9 +275,9 @@ def build_building_profile(
 
 
 def apply_plan(profile: dict, premium: bool) -> dict:
-    """Free plan: the score, its band, one tip and the week in progress. Everything else is withheld."""
+    """Insights tier: the score, its band, one tip and the week in progress. Everything else is withheld."""
     profile = dict(profile)
-    profile["plan"] = "premium" if premium else "free"
+    profile["plan"] = "full" if premium else "insights"
     if premium:
         profile["locked"] = []
         return profile
@@ -312,10 +295,8 @@ def apply_plan(profile: dict, premium: bool) -> dict:
 # ---------------------------------------------------------------------------
 # Database-backed entry point
 # ---------------------------------------------------------------------------
-def get_credit_profile(merchant_id, conn, as_of=None, premium: bool | None = None) -> dict:
+def get_credit_profile(merchant_id, conn, as_of=None, premium: bool = False) -> dict:
     as_of_date = _to_date(as_of) if as_of is not None else datetime.now(SAST).date()
-    if premium is None:
-        premium = is_premium_merchant(merchant_id)
 
     week_start = as_of_date - timedelta(days=as_of_date.weekday())
     this_week = get_week_to_date(merchant_id, week_start, conn)
@@ -334,7 +315,7 @@ def get_credit_profile(merchant_id, conn, as_of=None, premium: bool | None = Non
         )
 
     previous_score = None
-    if premium:  # only premium sees the change, so don't spend a query on free users
+    if premium:  # only the full plan sees the change, so don't spend a query otherwise
         try:
             previous_score = get_merchant_credit_assessment(
                 merchant_id, conn, as_of=as_of_date - timedelta(weeks=4)
