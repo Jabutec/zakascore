@@ -9,7 +9,10 @@ SAST = ZoneInfo("Africa/Johannesburg")
 # against repayment outcomes yet, so treat the score as a measure of business
 # activity and health, not a probability of default.
 # ---------------------------------------------------------------------------
-WINDOW_WEEKS = 12                  # complete Mon-Sun weeks that are scored
+MIN_WEEKS_TO_SCORE = 4             # complete Mon-Sun weeks of history needed before a score is shown
+MAX_WINDOW_WEEKS = 12              # the score uses at most this many of the most recent complete weeks
+GROWING_WEEKS = 8                  # 4-7 weeks = "early", 8-11 = "growing", 12 = "established"
+WINDOW_WEEKS = MAX_WINDOW_WEEKS    # old name, kept so existing imports keep working
 MIN_TRADING_DAYS_PER_WEEK = 3      # a week counts as a "trading week" at this many active days
 REVENUE_BENCHMARK_MONTHLY = 10000  # ZAR monthly equivalent that earns a full Revenue Level score
 WEEKS_PER_MONTH = 52 / 12
@@ -30,7 +33,7 @@ class InsufficientHistoryError(ValueError):
     """Not enough trading history to score. Subclasses ValueError, so callers that
     already catch ValueError keep working."""
 
-    def __init__(self, message, weeks_of_history=0, weeks_required=WINDOW_WEEKS):
+    def __init__(self, message, weeks_of_history=0, weeks_required=MIN_WEEKS_TO_SCORE):
         super().__init__(message)
         self.weeks_of_history = weeks_of_history
         self.weeks_required = weeks_required
@@ -38,6 +41,15 @@ class InsufficientHistoryError(ValueError):
 
 def clamp(value: float, low: float = 0, high: float = 100) -> float:
     return max(low, min(high, value))
+
+
+def score_maturity(weeks_scored: int) -> str:
+    """How much history sits behind the score. A 4-week score is real but less settled."""
+    if weeks_scored >= MAX_WINDOW_WEEKS:
+        return "established"
+    if weeks_scored >= GROWING_WEEKS:
+        return "growing"
+    return "early"
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +142,7 @@ def calculate_credit_score(weekly_revenues: list[float], weekly_active_days: lis
 
 
 # ---------------------------------------------------------------------------
-# Database access (merchant level: all of a merchant's stores combined)
+# Scoring window
 # ---------------------------------------------------------------------------
 def _to_date(value) -> date:
     if isinstance(value, datetime):
@@ -140,17 +152,33 @@ def _to_date(value) -> date:
     return value
 
 
-def _window_bounds(as_of: date) -> tuple[date, date]:
-    """The last WINDOW_WEEKS complete Mon-Sun weeks before the week containing `as_of`.
+def first_complete_week_start(first_transaction: date) -> date:
+    """Monday of the first Mon-Sun week the merchant traded for the whole of.
 
-    Returns (window_start, window_end): start is a Monday, end is the Monday of the
-    current week and is EXCLUSIVE.
+    A merchant who starts on a Thursday has a partial first week, which would look like a
+    quiet week and unfairly drag the score down, so history starts from the next Monday.
+    """
+    monday = first_transaction - timedelta(days=first_transaction.weekday())
+    return monday if first_transaction == monday else monday + timedelta(weeks=1)
+
+
+def scoring_window(as_of: date, first_transaction: date) -> tuple[date, date, int]:
+    """(window_start, window_end, weeks) for the complete weeks that can be scored.
+
+    window_start is a Monday. window_end is the Monday of the current week and is
+    EXCLUSIVE, so the week in progress is never scored. The window never reaches back
+    past the merchant's first complete week, and covers at most MAX_WINDOW_WEEKS.
     """
     current_week_start = as_of - timedelta(days=as_of.weekday())
-    window_start = current_week_start - timedelta(weeks=WINDOW_WEEKS)
-    return window_start, current_week_start
+    earliest = first_complete_week_start(first_transaction)
+    window_start = max(earliest, current_week_start - timedelta(weeks=MAX_WINDOW_WEEKS))
+    weeks = max(0, (current_week_start - window_start).days // 7)
+    return window_start, current_week_start, weeks
 
 
+# ---------------------------------------------------------------------------
+# Database access (merchant level: all of a merchant's stores combined)
+# ---------------------------------------------------------------------------
 def get_first_transaction_date(merchant_id, conn) -> date | None:
     cursor = conn.execute(
         """SELECT MIN((t.transaction_date AT TIME ZONE 'Africa/Johannesburg')::date)
@@ -165,8 +193,10 @@ def get_first_transaction_date(merchant_id, conn) -> date | None:
 def get_weekly_activity(merchant_id, window_start: date, window_end: date, conn):
     """Weekly revenue and active trading days, SAST weeks starting Monday.
 
+    Covers every week from window_start up to (not including) window_end.
     Weeks with no sales are filled in as zero, so quiet weeks count.
     """
+    weeks = max(0, (window_end - window_start).days // 7)
     cursor = conn.execute(
         """SELECT date_trunc('week', t.transaction_date AT TIME ZONE 'Africa/Johannesburg')::date,
                   SUM(t.amount_zar),
@@ -188,41 +218,49 @@ def get_weekly_activity(merchant_id, window_start: date, window_end: date, conn)
     by_week = {row[0]: (float(row[1]), int(row[2])) for row in cursor.fetchall()}
 
     revenues, active_days = [], []
-    for i in range(WINDOW_WEEKS):
+    for i in range(weeks):
         revenue, days = by_week.get(window_start + timedelta(weeks=i), (0.0, 0))
         revenues.append(revenue)
         active_days.append(days)
     return revenues, active_days
 
 
+def get_week_to_date(merchant_id, week_start: date, conn) -> tuple[float, int]:
+    """Revenue and active days so far in the week that starts on `week_start`."""
+    revenues, active_days = get_weekly_activity(
+        merchant_id, week_start, week_start + timedelta(weeks=1), conn
+    )
+    return revenues[0], active_days[0]
+
+
 def get_merchant_credit_assessment(merchant_id, conn, as_of=None) -> dict:
     """Full assessment: score, components, metrics and the window that was scored.
 
-    Raises InsufficientHistoryError until the merchant has traded for the whole window.
-    A thin file is "not scored yet", not a low score.
+    Raises InsufficientHistoryError until the merchant has MIN_WEEKS_TO_SCORE complete
+    weeks of history. A thin file is "not scored yet", not a low score.
     """
     as_of_date = _to_date(as_of) if as_of is not None else datetime.now(SAST).date()
-    window_start, window_end = _window_bounds(as_of_date)
 
     first_transaction = get_first_transaction_date(merchant_id, conn)
     if first_transaction is None:
         raise InsufficientHistoryError("No transactions recorded yet")
 
-    weeks_of_history = max(0, (as_of_date - first_transaction).days // 7)
-    if first_transaction > window_start:
+    window_start, window_end, weeks = scoring_window(as_of_date, first_transaction)
+    if weeks < MIN_WEEKS_TO_SCORE:
         raise InsufficientHistoryError(
-            f"Needs {WINDOW_WEEKS} complete weeks of history; has {weeks_of_history}",
-            weeks_of_history=weeks_of_history,
+            f"Needs {MIN_WEEKS_TO_SCORE} complete weeks of history; has {weeks}",
+            weeks_of_history=weeks,
         )
 
     revenues, active_days = get_weekly_activity(merchant_id, window_start, window_end, conn)
     if sum(revenues) <= 0:
-        raise InsufficientHistoryError(
-            "No sales in the scoring window", weeks_of_history=weeks_of_history
-        )
+        raise InsufficientHistoryError("No sales in the scoring window", weeks_of_history=weeks)
 
     assessment = score_weekly_history(revenues, active_days)
-    assessment["metrics"]["weeks_of_history"] = weeks_of_history
+    assessment["metrics"]["weeks_of_history"] = weeks
+    assessment["maturity"] = score_maturity(weeks)
+    assessment["weekly_revenues_zar"] = [round(value, 2) for value in revenues]
+    assessment["weekly_active_days"] = active_days
     assessment["window"] = {
         "start": window_start.isoformat(),
         "end": (window_end - timedelta(days=1)).isoformat(),  # inclusive, for display
@@ -233,8 +271,8 @@ def get_merchant_credit_assessment(merchant_id, conn, as_of=None) -> dict:
 def get_merchant_credit_score(merchant_id, period_start, period_end, conn):
     """Kept so the existing route keeps working.
 
-    period_start is no longer used: the score covers the last WINDOW_WEEKS complete
-    weeks before period_end. Raises ValueError (InsufficientHistoryError) for merchants
-    without enough history, which the route already turns into a null score.
+    period_start is no longer used: the score covers the most recent complete weeks
+    (at most MAX_WINDOW_WEEKS) before period_end. Raises ValueError (InsufficientHistoryError)
+    for merchants without enough history, which the route already turns into a null score.
     """
     return get_merchant_credit_assessment(merchant_id, conn, as_of=period_end)["score"]

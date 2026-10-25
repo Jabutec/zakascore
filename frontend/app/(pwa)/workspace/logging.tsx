@@ -140,7 +140,7 @@ const EXAMPLE_PROMPTS = [
 const APP_NAV: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Dashboard", href: "/workspace/dashboard#overview", icon: LayoutDashboard },
   { label: "Reports", href: "/workspace/dashboard#revenue-chart", icon: BarChart3 },
-  { label: "Credit", href: "/workspace/dashboard#score-overview", icon: Gauge },
+  { label: "Credit", href: "/workspace/credit", icon: Gauge },
   { label: "Insights", href: "/workspace/dashboard#insights", icon: Lightbulb },
   { label: "Notifications", href: "/workspace/dashboard#notifications-panel", icon: Bell },
 ];

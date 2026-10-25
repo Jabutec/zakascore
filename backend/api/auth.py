@@ -23,6 +23,7 @@ from bi.visualization import (
 from database.connection import get_db
 from services.auth import verify_access_token
 from services.authorization import get_user_merchants, require_merchant_access, require_store_access
+from services.credit_profile import get_credit_profile
 from services.credit_scoring import InsufficientHistoryError, get_merchant_credit_assessment
 from services.onboarding import (
     create_dashboard_merchant,
@@ -390,6 +391,27 @@ def get_my_credit_score_details(
         "metrics": assessment["metrics"],
         "window": assessment["window"],
     }
+
+
+@router.get("/api/credit-profile")
+def get_my_credit_profile(
+    merchant: CurrentMerchant = Depends(get_current_merchant),
+    conn=Depends(get_conn),
+):
+    """The credit profile page.
+
+    Every merchant gets the score, its band, one tip and the week in progress. The factors,
+    metrics, forecast and score change are only included when the merchant's plan has
+    Feature.CREDIT_PREVIEW, so merchants without it never receive them. Unlike
+    /api/credit-score/details this does not return 403 for the Insights tier: the page still
+    has something to show, and the response says what is locked.
+    """
+    try:
+        require_feature(Feature.CREDIT_PREVIEW, merchant.tier, merchant.created_at)
+        premium = True
+    except FeatureLockedError:
+        premium = False
+    return get_credit_profile(merchant.merchant_id, conn, premium=premium)
 
 
 @router.get("/api/entitlements")
